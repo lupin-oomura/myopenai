@@ -8,15 +8,8 @@ setup(
         'openai',
         'python-dotenv',
         'requests',
-
-        #音声認識で使用
-        'pydub',
-        'speechrecognition',
-        'torch',
-        'numpy',
-        'pyaudio',
     ],
-    url='https://github.com/lupin-oomura/myfunc.git',
+    url='https://github.com/lupin-oomura/myopenai.git',
     author='Shin Oomura',
     author_email='shin.oomura@gmail.com',
     description='A simple OpenAI function package',
