@@ -1,0 +1,11 @@
+openai
+python-dotenv
+# streamlit
+requests
+
+#音声認識で使用
+pydub
+speechrecognition
+torch
+numpy
+pyaudio
