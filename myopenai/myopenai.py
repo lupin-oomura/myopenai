@@ -165,10 +165,11 @@ class myopenai :
             print("画像のダウンロードに失敗しました。")
             
 
-    def transcribe_audio(self, audio_file, model:str="whisper-1"):
+    def transcribe_audio(self, audio_file, model:str="whisper-1", lang:str='ja'):
         return self.client.audio.transcriptions.create(
-            model=model,
-            file=audio_file
+            model    = model,
+            language = lang,
+            file     = audio_file,
         )
 
 
