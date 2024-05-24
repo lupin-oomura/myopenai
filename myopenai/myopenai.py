@@ -68,7 +68,7 @@ class myopenai :
     messages     = None
     mystreamlit  = None
     unique_id    = None #ユーザー固有のID（音声ファイルとかの名前になる）
-    mygpts       = None #mygptsクラスのインスタンス
+    gpts         = None #mygptsクラスのインスタンス
 
     def __init__(self, myst=None, model:str="gpt-4o", systemmessage:str="") :
         self.unique_id = str(uuid.uuid4())
@@ -82,7 +82,9 @@ class myopenai :
             model=model,
         )
 
-        self.mygpts = self.mygpts(self)
+        print(f"assistant id = {self.assistant.id}")
+
+        self.gpts = self.mygpts(self)
 
 
     def set_prompt(self, txt:str):
@@ -95,10 +97,17 @@ class myopenai :
         self.thread = self.client.beta.threads.create() 
         return self.thread
 
+    def get_threadid(self) :
+        return self.thread.id
 
-    def create_message(self, msg:str) :
+    def set_thread(self, threadid) :
+        self.thread = self.client.beta.threads.retrieve(threadid)
+
+    def create_message(self, msg:str, threadid=None) :
+        tid = self.thread.id if threadid is None else threadid
+
         self.client.beta.threads.messages.create(
-            thread_id = self.thread.id,
+            thread_id = tid,
             content   = msg,
             role="user",
         )
@@ -455,30 +464,45 @@ class myopenai :
                 jsondata = self.mo.myjson(targetresult[-1])  # -1=最新の結果
                 msg = re.sub(pattern, jsondata[itemname], q)  # {}部分を置換
 
-                # さらに、gotoコマンド部分をつぶす。
-                pattern = r"\|(.*?)\|"
-                msg = re.sub(pattern, "", msg)
 
             else:
                 msg = q
 
+            # ||で囲まれたコマンド部分をつぶす。
+            pattern = r"\|(.*?)\|"
+            msg = re.sub(pattern, "", msg)
+
             return msg
+        
+        def __get_dalle_option(self, q) :
+            # |"goto":7|を抽出
+            pattern = r"\|dalle:(.*?)\|"
+            command = re.findall(pattern, q)  # 正規表現で抽出
+            model = None
+            size  = None
+            for c in command : 
+                model = c.split(",")[0]
+                size  = c.split(",")[1]
+                break #複数あっても、最初の１つだけ
+
+            return model, size
 
         def __set_nextstep(self, basenext: int, msg: str, idx: int = 0) -> int:
             # |"goto":7|を抽出
-            pattern = r"\|(.*?)\|"
+            pattern = r"\|goto:(.*?)\|"
             command = re.findall(pattern, msg)  # 正規表現で抽出
-            if len(command) == 0:
-                nextstep = basenext
-            elif "goto" in command[0]:
-                no = int(command[0].split(":")[1].split(",")[idx])
+            nextstep = basenext
+            for c in command : 
+                no = int(c.split(",")[idx])
                 nextstep = no
-            else:
-                nextstep = basenext
+                break #複数あっても、最初の１つだけ
 
             self.nextstep = nextstep        
             return nextstep
 
+        def get_log(self) :
+            return self.log
+        
 
         def is_eoq(self):
             return self.currstep is None
@@ -535,7 +559,8 @@ class myopenai :
                 return None
 
             q = self.__get_qdata(self.currstep)
-            msg = self.__adjust_q(q['q'])
+            origmsg = q['q']
+            msg = self.__adjust_q(origmsg)
 
             if q['type'] not in ['dalle']:
                 # dalleは画像生成するので、プロンプトを投げない
@@ -548,37 +573,40 @@ class myopenai :
 
             if q['type'] == 'normal':
                 self.f_userturn = True
-                self.__set_nextstep(q['nextid'], msg)
+                self.__set_nextstep(q['nextid'], origmsg)
+
             elif q['type'] == 'if':
                 j = self.mo.myjson(response)
                 if j is not None:
                     self.f_if_ng = False
                     self.f_userturn = False  # 判定OKなら、次の質問を流す
-                    self.__set_nextstep(q['nextid'], msg, 0)
+                    self.__set_nextstep(q['nextid'], origmsg, 0)
                 else:
                     self.f_if_ng = True
                     self.f_userturn = True  # NGの場合は、修正回答をユーザーからもらう
-                    self.__set_nextstep(self.currstep, msg, 1)
+                    self.__set_nextstep(self.currstep, origmsg, 1)
                     #もし移動先指定があったら、userturnはFalseになる
                     if self.currstep != self.nextstep : #通常は、NGの場合はcurrstepとnextstepが一緒になる
                         self.f_userturn = False
 
             elif q['type'] == 'gotonext':
                 self.f_userturn = False
-                self.__set_nextstep(q['nextid'], msg)
+                self.__set_nextstep(q['nextid'], origmsg)
+
             elif q['type'] == 'dalle':
                 # 画像生成処理
                 unique_id = uuid.uuid4()
                 filename = f"gazou_{unique_id}.png"
+                model, size = self.__get_dalle_option(origmsg)
                 self.mo.image_generate(
                     msg,
-                    size="256x256",
-                    model='dall-e-2',
+                    size=size,
+                    model=model,
                     filename=filename,
                 )
                 self.log.append({"role": "dalle", "msg": filename, "baseqid": self.currstep})
                 self.f_userturn = False
-                self.__set_nextstep(q['nextid'], msg) 
+                self.__set_nextstep(q['nextid'], origmsg) 
             else:
                 print(f"type設定がおかしいかも？ : qno = {q['id']}")
                 exit(0)

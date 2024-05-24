@@ -5,6 +5,33 @@ from dotenv import load_dotenv
 load_dotenv()
 
 #--------------------------------------------------------#
+#--- 普通のチャット --------------------------------------#
+#--------------------------------------------------------#
+mo = myopenai.myopenai()
+mo.set_prompt("")
+mo.create_thread()
+mo.create_message("大谷翔平の誕生日は？")
+mo.run()
+mo.create_message("では、性別は？")
+mo.run()
+# thread_idを保存しておけば、会話を続けられる
+threadid = mo.get_threadid()
+print(threadid) #このthread_idをメモっておいてください
+
+#--------------------------------------------------------#
+#--- 過去のスレッドを読み込んで、途中から会話開始 -----------#
+#--------------------------------------------------------#
+#一度実行を止めて、上の“普通のチャット”をコメントアウトして始めてください。
+threadid = 'thread_ay7m7qQzGK9pNQyUwVEgPQn5' #上でメモッたthread_idを貼り付ける
+mo2 = myopenai.myopenai()
+mo2.set_prompt("")
+mo2.set_thread(threadid)
+mo2.create_message("ちなみに、何のスポーツの選手？")
+mo2.run()
+
+
+
+#--------------------------------------------------------#
 #--- My GPTs風に処理する方法 -----------------------------#
 #--------------------------------------------------------#
 
@@ -19,7 +46,7 @@ load_dotenv()
         なので、成功した場合はJSON結果を返すようにコマンドに自分で仕込む必要がある。
         ※NGでも、移動先指定が入っていれば、is_userturn() == Falseになる
     gotonext : コマンドを投げて、GPTが回答を返して、その後ユーザーに入力を求めるモードにならない (is_userturn() == False)
-    dalle : 画像生成させる
+    dalle : 画像生成させる。画像生成のオプションは必ず指定する。メッセージ内に書く（|dalle:dall-e-2,256x256|とか|dalle:dall-e-3,1792x1024|とか）
 コマンドには、他の回答のJSON結果を使える。
     例：あいう{jsonresult:5,prompt}えお → {***}が、コマンドID5のJSON結果の"prompt"アイテムの値になる。
 通常は上から順にコマンドを流すが、行先指定もできる。以下の仕込みを、メッセージ内に入れる（どこでもOK。GPTに投げるメッセージからは消される）
@@ -33,6 +60,7 @@ commands = """
 1
 ----------
 私に、「こんにちわ。赤と白はどちらが好きですか」と質問してください。
+|goto:2|
 ----------
 normal
 ==========
@@ -72,6 +100,7 @@ gotonext
 6
 ----------
 {jsonresult:5,prompt}
+|dalle:dall-e-2,256x256|
 ----------
 dalle
 ==========
@@ -108,13 +137,16 @@ mo = myopenai.myopenai()
 mo.set_prompt("あなたは優秀なコピーライターです。今から私にいろいろと質問をし、その回答に基づいてイラストを生成してもらいます。")
 mo.create_thread()
 
-mo.mygpts.set_questions("commanddata.txt")
+mo.gpts.set_questions("commanddata.txt")
 
-while not mo.mygpts.is_eoq():
-    mo.mygpts.post_registered_question()
-    if mo.mygpts.is_userturn():
+while not mo.gpts.is_eoq():
+    mo.gpts.post_registered_question()
+    if mo.gpts.is_userturn():
         msg = input("msg:")
-        mo.mygpts.set_usermessage(msg)
+        mo.gpts.set_usermessage(msg)
+
+        log = mo.gpts.get_log()
+        print(log)
 
 
 
