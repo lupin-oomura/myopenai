@@ -239,7 +239,10 @@ class myopenai :
         else :
             nakami = response
 
-        jsondata = json.loads(nakami)
+        try :
+            jsondata = json.loads(nakami)
+        except json.decoder.JSONDecodeError:
+            jsondata = None
         return jsondata
 
     # def getdata_from_vtt(self, vtt_file_path:str) -> list :
