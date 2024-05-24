@@ -227,7 +227,7 @@ class myopenai :
     #     return conversation
 
 
-    def myjson(self, response:str)->dict :
+    def myjson(self, response:str, f_print:bool=False)->dict :
         # JSON形式の文字列をPythonのリストに変換
         if '```json\n' in response :
             nakami = response.split('```json\n')[1]
@@ -239,10 +239,17 @@ class myopenai :
         else :
             nakami = response
 
+        # 余分なカンマを取り除く
+        nakami = re.sub(r',\s*([\]}])', r'\1', nakami)
         try :
             jsondata = json.loads(nakami)
         except json.decoder.JSONDecodeError:
             jsondata = None
+            if f_print :
+                print("---NO JSON DATA ------------------")
+                print(nakami)
+                print("----------------------------------")
+                
         return jsondata
 
     # def getdata_from_vtt(self, vtt_file_path:str) -> list :
