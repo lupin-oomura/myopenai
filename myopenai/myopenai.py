@@ -595,149 +595,149 @@ class myopenai :
 
 
 
-def tanjun() :
-    mo = myopenai('gpt-3.5-turbo')
+# def tanjun() :
+#     mo = myopenai('gpt-3.5-turbo')
 
-    mo.set_prompt('あなたは精神科医です。私の悩みを聞いて、適切にアドバイスをしてください。')
-    conv = mo.load_conversation()
-    ans = conv.predict(input='上司と反りが合わずに悩んでいる。')
-    print(ans)
-    ans = conv.predict(input='別のアドバイスありますか？')
-    print(ans)
-    print(conv.memory)
-
-
-def embedding_ppt() :
-    mo = myopenai('gpt-3.5-turbo')
-
-    # ベクトル化の処理
-    # file_path = r'C:\Users\大村真ShinOOMURA\Documents\大村\スコアカード虎の巻\スコアカード虎の巻.pptx'
-    # mo.ppt_to_vector(file_path)
-
-    # 流れ：質問と類似度の高いドキュメントをシステムメッセージに組み込んで、質問を投げる。なので追加質問は最初の質問に関係しないとワークしないので注意
-    # 事前準備
-    vecname = 'スコアカード虎の巻'
-    Q       = 'ダミー化について教えてください。'
-    prompt  = (
-        '今からあなたに質問します。また、マニュアルからEmbedding処理を掛けてその質問と類似度の高い文章群をお渡します。\n'
-        'そのEmbedding文章群を元に、以下のルールに従って回答してください。\n'
-        '\n'
-        'ルール: """\n'
-        '* 以下の回答フォーマットのように回答する。\n'
-        '* 質問に200文字以内で回答\n'
-        '* 質問と類似度の高いページ番号を最大３つ回答。\n'
-        '* 関連する文書が「Embedding文章群」になければ、「分かりません」と回答'
-        '"""\n'
-        '\n'
-        '回答フォーマット: """\n'
-        '関連ページ（類似度の高いページ）：●ページ、●ページ、●ページ\n'
-        '回答: ●●●\n'
-        '"""\n'
-        '\n'
-    )
+#     mo.set_prompt('あなたは精神科医です。私の悩みを聞いて、適切にアドバイスをしてください。')
+#     conv = mo.load_conversation()
+#     ans = conv.predict(input='上司と反りが合わずに悩んでいる。')
+#     print(ans)
+#     ans = conv.predict(input='別のアドバイスありますか？')
+#     print(ans)
+#     print(conv.memory)
 
 
+# def embedding_ppt() :
+#     mo = myopenai('gpt-3.5-turbo')
 
-    # ベクトルデータの読み込み
-    df_vector = mo.load_vector(vecname)
-    # プロンプトセット
-    mo.set_prompt(prompt)
+#     # ベクトル化の処理
+#     # file_path = r'C:\Users\大村真ShinOOMURA\Documents\大村\スコアカード虎の巻\スコアカード虎の巻.pptx'
+#     # mo.ppt_to_vector(file_path)
 
-    # 類似文書の抽出
-    txt_ruiji = mo.search_reviews(Q, df_vector, n=10)
-
-    Q_plus = (
-        f'{Q}\n'
-        '\n'
-        'Embedding文章群: """\n'
-        '|ドキュメント名|ページ番号|文章|類似度|\n'
-        f'{txt_ruiji}\n'
-        '"""\n'
-    )
+#     # 流れ：質問と類似度の高いドキュメントをシステムメッセージに組み込んで、質問を投げる。なので追加質問は最初の質問に関係しないとワークしないので注意
+#     # 事前準備
+#     vecname = 'スコアカード虎の巻'
+#     Q       = 'ダミー化について教えてください。'
+#     prompt  = (
+#         '今からあなたに質問します。また、マニュアルからEmbedding処理を掛けてその質問と類似度の高い文章群をお渡します。\n'
+#         'そのEmbedding文章群を元に、以下のルールに従って回答してください。\n'
+#         '\n'
+#         'ルール: """\n'
+#         '* 以下の回答フォーマットのように回答する。\n'
+#         '* 質問に200文字以内で回答\n'
+#         '* 質問と類似度の高いページ番号を最大３つ回答。\n'
+#         '* 関連する文書が「Embedding文章群」になければ、「分かりません」と回答'
+#         '"""\n'
+#         '\n'
+#         '回答フォーマット: """\n'
+#         '関連ページ（類似度の高いページ）：●ページ、●ページ、●ページ\n'
+#         '回答: ●●●\n'
+#         '"""\n'
+#         '\n'
+#     )
 
 
 
-    # チャット開始
-    conv = mo.load_conversation()
-    ans = conv.predict(input=Q_plus)
-    print(ans)
-    ans = conv.predict(input='関連ページは？')
-    print(ans)
-    ans = conv.predict(input='Coarse Classingについて教えて')
-    print(ans)
+#     # ベクトルデータの読み込み
+#     df_vector = mo.load_vector(vecname)
+#     # プロンプトセット
+#     mo.set_prompt(prompt)
+
+#     # 類似文書の抽出
+#     txt_ruiji = mo.search_reviews(Q, df_vector, n=10)
+
+#     Q_plus = (
+#         f'{Q}\n'
+#         '\n'
+#         'Embedding文章群: """\n'
+#         '|ドキュメント名|ページ番号|文章|類似度|\n'
+#         f'{txt_ruiji}\n'
+#         '"""\n'
+#     )
 
 
 
-def embedding_txt() :
-    mo = myopenai('gpt-3.5-turbo')
-
-    # ベクトル化の処理
-    file_path = r'C:\temp\Apps\Python\st_toranomaki\Docker_to_Studio.txt'
-    # mo.txt_to_vector(file_path)
-
-    # 流れ：質問と類似度の高いドキュメントをシステムメッセージに組み込んで、質問を投げる。なので追加質問は最初の質問に関係しないとワークしないので注意
-    # 事前準備
-    vecname = 'Docker_to_Studio'
-    Q       = 'Dockerfileのサンプルを知りたい'
-    prompt  = (
-        '今からあなたに質問します。また、マニュアルからEmbedding処理を掛けてその質問と類似度の高い文章群をお渡します。\n'
-        'そのEmbedding文章群を元に、以下のルールに従って回答してください。\n'
-        '\n'
-        'ルール: """\n'
-        '* 以下の回答フォーマットのように回答する。\n'
-        '* 質問に200文字以内で回答\n'
-        '* 質問と類似度の高い行番号を最大３つ回答。\n'
-        '* 関連する文書が「Embedding文章群」になければ、「分かりません」と回答'
-        '"""\n'
-        '\n'
-        '回答フォーマット: """\n'
-        '関連する行番号（類似度の高い行番号）：●行、●行、●行\n'
-        '回答: ●●●\n'
-        '"""\n'
-        '\n'
-    )
+#     # チャット開始
+#     conv = mo.load_conversation()
+#     ans = conv.predict(input=Q_plus)
+#     print(ans)
+#     ans = conv.predict(input='関連ページは？')
+#     print(ans)
+#     ans = conv.predict(input='Coarse Classingについて教えて')
+#     print(ans)
 
 
 
-    # ベクトルデータの読み込み
-    df_vector = mo.load_vector(vecname)
-    # プロンプトセット
-    mo.set_prompt(prompt)
+# def embedding_txt() :
+#     mo = myopenai('gpt-3.5-turbo')
 
-    # 類似文書の抽出
-    txt_ruiji = mo.search_reviews(Q, df_vector, n=10)
+#     # ベクトル化の処理
+#     file_path = r'C:\temp\Apps\Python\st_toranomaki\Docker_to_Studio.txt'
+#     # mo.txt_to_vector(file_path)
 
-    Q_plus = (
-        f'{Q}\n'
-        '\n'
-        'Embedding文章群: """\n'
-        '|行番号|文章|類似度|\n'
-        f'{txt_ruiji}\n'
-        '"""\n'
-    )
+#     # 流れ：質問と類似度の高いドキュメントをシステムメッセージに組み込んで、質問を投げる。なので追加質問は最初の質問に関係しないとワークしないので注意
+#     # 事前準備
+#     vecname = 'Docker_to_Studio'
+#     Q       = 'Dockerfileのサンプルを知りたい'
+#     prompt  = (
+#         '今からあなたに質問します。また、マニュアルからEmbedding処理を掛けてその質問と類似度の高い文章群をお渡します。\n'
+#         'そのEmbedding文章群を元に、以下のルールに従って回答してください。\n'
+#         '\n'
+#         'ルール: """\n'
+#         '* 以下の回答フォーマットのように回答する。\n'
+#         '* 質問に200文字以内で回答\n'
+#         '* 質問と類似度の高い行番号を最大３つ回答。\n'
+#         '* 関連する文書が「Embedding文章群」になければ、「分かりません」と回答'
+#         '"""\n'
+#         '\n'
+#         '回答フォーマット: """\n'
+#         '関連する行番号（類似度の高い行番号）：●行、●行、●行\n'
+#         '回答: ●●●\n'
+#         '"""\n'
+#         '\n'
+#     )
 
 
 
-    # チャット開始
-    conv = mo.load_conversation()
-    ans = conv.predict(input=Q_plus)
-    print(ans)
-    ans = conv.predict(input='関連ページは？')
-    print(ans)
-    ans = conv.predict(input='Coarse Classingについて教えて')
-    print(ans)
+#     # ベクトルデータの読み込み
+#     df_vector = mo.load_vector(vecname)
+#     # プロンプトセット
+#     mo.set_prompt(prompt)
+
+#     # 類似文書の抽出
+#     txt_ruiji = mo.search_reviews(Q, df_vector, n=10)
+
+#     Q_plus = (
+#         f'{Q}\n'
+#         '\n'
+#         'Embedding文章群: """\n'
+#         '|行番号|文章|類似度|\n'
+#         f'{txt_ruiji}\n'
+#         '"""\n'
+#     )
 
 
-def image_generate(mo) :
-    image_url = mo.image_generate("a white cat", size="256x256", model='dall-e-2', filename="downloaded_image.png")
-    print(image_url)
 
-if __name__ == '__main__' :
-    mo = myopenai()
-    image_generate(mo)
-    # mo.pdf_to_vector(r'C:\temp\Apps\Python\st_toranomaki\【御請求書】テスト.pdf')
-    # tanjun()
-    # embedding_ppt()
-    # embedding_txt()
+#     # チャット開始
+#     conv = mo.load_conversation()
+#     ans = conv.predict(input=Q_plus)
+#     print(ans)
+#     ans = conv.predict(input='関連ページは？')
+#     print(ans)
+#     ans = conv.predict(input='Coarse Classingについて教えて')
+#     print(ans)
 
-# StudioにDockerをあげる時のTips集
+
+# def image_generate(mo) :
+#     image_url = mo.image_generate("a white cat", size="256x256", model='dall-e-2', filename="downloaded_image.png")
+#     print(image_url)
+
+# if __name__ == '__main__' :
+#     mo = myopenai()
+#     image_generate(mo)
+#     # mo.pdf_to_vector(r'C:\temp\Apps\Python\st_toranomaki\【御請求書】テスト.pdf')
+#     # tanjun()
+#     # embedding_ppt()
+#     # embedding_txt()
+
+# # StudioにDockerをあげる時のTips集
