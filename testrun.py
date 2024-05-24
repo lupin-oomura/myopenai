@@ -1,41 +1,158 @@
 # pip install git+https://github.com/lupin-oomura/myfunc.git
 
-from myfunc import myopenai
+import myopenai
 from dotenv import load_dotenv
 load_dotenv()
 
+#--------------------------------------------------------#
+#--- My GPTs風に処理する方法 -----------------------------#
+#--------------------------------------------------------#
+
+"""
+#コマンド設定
+コマンドは、==========(イコール10個)で区切る。
+1コマンドには3つの要素がある。----------(ハイフン10個)で区切る。
+   ID / コマンド / コマンド種類
+コマンド種類は、normal / if / gotonext / dalle
+    normal : そのコマンドを投げて、GPTが回答を返して、その後ユーザーに入力を求めるモードにする。 (is_userturn() == True)
+    if : そのコマンドを投げた後、JSON形式が返ってきていたら、次のステップに移る (is_userturn() == False)。JSON形式が回答になければ、同じ質問を繰り返す。(is_userturn()==True)
+        なので、成功した場合はJSON結果を返すようにコマンドに自分で仕込む必要がある。
+        ※NGでも、移動先指定が入っていれば、is_userturn() == Falseになる
+    gotonext : コマンドを投げて、GPTが回答を返して、その後ユーザーに入力を求めるモードにならない (is_userturn() == False)
+    dalle : 画像生成させる
+コマンドには、他の回答のJSON結果を使える。
+    例：あいう{jsonresult:5,prompt}えお → {***}が、コマンドID5のJSON結果の"prompt"アイテムの値になる。
+通常は上から順にコマンドを流すが、行先指定もできる。以下の仕込みを、メッセージ内に入れる（どこでもOK。GPTに投げるメッセージからは消される）
+    |goto:9|   → コマンドID9に進む 
+    |goto:9,4| → if文の時は、このように2つ指定する必要あり。OKの場合は9番、NGの場合は4番に飛ぶ。NGでもis_userturn()=Falseになるのでその点注意。
+"""
 
 
-def text_generate(mo) :
-    mo.create_thread()
-    msg = "大谷翔平の誕生日はいつですか"
-    mo.create_message(msg)
-    mo.run(True)
+commands = """
+==========
+1
+----------
+私に、「こんにちわ。赤と白はどちらが好きですか」と質問してください。
+----------
+normal
+==========
+2
+----------
+私はどちらの色を選びましたか？
+もし赤を選んだら、JSON形式で出力してください。
+```json
+{"選択色": "赤"}
+```
+もし赤以外を選んでいたら、もう一度質問してください。（赤を選択するまで、同じ質問を繰り返してください。）
+----------
+if
+==========
+3
+----------
+「あなたは、○○の色が好きなんですね」と言ってください。
+----------
+gotonext
+==========
+4
+----------
+「どんなテーマが良いですか？今パッと思いついたことを話してください。」と言ってください。
+----------
+normal
+==========
+5
+----------
+話したテーマに関するイラストを、私の選んだ色をベース色にして生成してもらいたいです。
+そのイラスト生成するためのプロンプトを、英語でJSON形式で出力してください。
+```json
+{"prompt":"prompt for generating an illustration of the message in English"}
+```
+----------
+gotonext
+==========
+6
+----------
+{jsonresult:5,prompt}
+----------
+dalle
+==========
+7
+----------
+私は今、dalleで生成したイラストを見ています。
+そのイラストが気に入ったかどうかを私に聞いてください。
+----------
+normal
+==========
+8
+----------
+私はイラストを気に入っていますか？
+気に入っているようなら、以下のように出力してください。
+```json
+{"イラスト納得":"Yes"}
+気に入っていない場合や、追加要望があった場合は、「了解です。」とだけプロンプトに出力してください。それ以外の文章は不要です。
+|goto:9,4|
+----------
+if
+==========
+9
+----------
+「お疲れさまでした。」と言ってください。
+----------
+gotonext
+==========
+"""
+with open("commanddata.txt", "w", encoding="utf-8") as f:
+    f.write(commands)
 
 
-def image_generate(mo) :
-    image_url = mo.image_generate("a white cat", size="256x256", model='dall-e-2', filename="downloaded_image.png")
-    print(image_url)
+mo = myopenai.myopenai()
+mo.set_prompt("あなたは優秀なコピーライターです。今から私にいろいろと質問をし、その回答に基づいてイラストを生成してもらいます。")
+mo.create_thread()
+
+mo.mygpts.set_questions("commanddata.txt")
+
+while not mo.mygpts.is_eoq():
+    mo.mygpts.post_registered_question()
+    if mo.mygpts.is_userturn():
+        msg = input("msg:")
+        mo.mygpts.set_usermessage(msg)
 
 
 
 
-def main():
-    mo = myopenai.myopenai()
 
-    audiofile = mo.mytexttospeech("テストをしています")
-    print(audiofile)
+
+
+
+# def text_generate(mo) :
+#     mo.create_thread()
+#     msg = "大谷翔平の誕生日はいつですか"
+#     mo.create_message(msg)
+#     mo.run(True)
+
+
+# def image_generate(mo) :
+#     image_url = mo.image_generate("a white cat", size="256x256", model='dall-e-2', filename="downloaded_image.png")
+#     print(image_url)
+
+
+
+
+# def main():
+#     mo = myopenai.myopenai()
+
+#     audiofile = mo.mytexttospeech("テストをしています")
+#     print(audiofile)
     
-    # mo.pdf_to_vector(r'C:\temp\Apps\Python\st_toranomaki\【御請求書】テスト.pdf')
-    # tanjun()
-    # embedding_ppt()
-    # embedding_txt()
+#     # mo.pdf_to_vector(r'C:\temp\Apps\Python\st_toranomaki\【御請求書】テスト.pdf')
+#     # tanjun()
+#     # embedding_ppt()
+#     # embedding_txt()
 
 
 
 
-if __name__ == "__main__":
-    main()
+# if __name__ == "__main__":
+#     main()
 
 
 

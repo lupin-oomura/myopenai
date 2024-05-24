@@ -68,7 +68,7 @@ class myopenai :
     messages     = None
     mystreamlit  = None
     unique_id    = None #ユーザー固有のID（音声ファイルとかの名前になる）
-
+    mygpts       = None #mygptsクラスのインスタンス
 
     def __init__(self, myst=None, model:str="gpt-4o", systemmessage:str="") :
         self.unique_id = str(uuid.uuid4())
@@ -81,6 +81,9 @@ class myopenai :
             tools=[{"type": "code_interpreter"}],
             model=model,
         )
+
+        self.mygpts = self.mygpts(self)
+
 
     def set_prompt(self, txt:str):
         self.assistant = self.client.beta.assistants.update(
@@ -240,7 +243,7 @@ class myopenai :
             nakami = response
 
         # 余分なカンマを取り除く
-        nakami = re.sub(r',\s*([\]}])', r'\1', nakami)
+        nakami = re.sub(r',\s*([\]\}])', r'\1', nakami)
         try :
             jsondata = json.loads(nakami)
         except json.decoder.JSONDecodeError:
@@ -249,7 +252,7 @@ class myopenai :
                 print("---NO JSON DATA ------------------")
                 print(nakami)
                 print("----------------------------------")
-                
+
         return jsondata
 
     # def getdata_from_vtt(self, vtt_file_path:str) -> list :
@@ -418,6 +421,178 @@ class myopenai :
     #         f.write(msg)
 
     #     return l_res
+
+
+    #-------------------------------------------------#
+    #--- My GPTs in myopenai -------------------------#
+    #-------------------------------------------------#
+    class mygpts:
+        def __init__(self, mo):
+            self.currstep = 0
+            self.nextstep = 0           # 次の質問。ifだと、stepと同じ値が入る
+            self.f_userturn = False     # このフラグが立っていたら、ユーザーメッセージを入れる
+            self.f_if_ng = True         # type=ifでNGになった場合、フラグが立つ(特に使ってないけど、いずれ何かに使いそう)
+            self.mo = mo                # myopenaiのインスタンス
+            self.qlist = []
+            self.log = []
+
+
+        
+        def __get_qdata(self, id: int) -> dict:
+            return next(item for item in self.qlist if item["id"] == id)
+
+        def __adjust_q(self, q: str) -> str:
+            # フォーマット : {jsonresult:A,B} AはQID、BはItemName
+            # 例：あいう{jsonresult:7,prompt}えお→{}の中が、id7のJSONDATAのpromptに置換される
+            if '{jsonresult:' in q:
+                pattern = r"\{(.*?)\}"
+                command = re.findall(pattern, q)[0]  # 正規表現で抽出
+
+                qid = command.split(":")[1].split(",")[0].strip()
+                itemname = command.split(":")[1].split(",")[1].strip()
+                targetresult = [x["msg"] for x in self.log if x["role"] == 'assistant' and x["baseqid"] == int(qid)]
+                
+                jsondata = self.mo.myjson(targetresult[-1])  # -1=最新の結果
+                msg = re.sub(pattern, jsondata[itemname], q)  # {}部分を置換
+
+                # さらに、gotoコマンド部分をつぶす。
+                pattern = r"\|(.*?)\|"
+                msg = re.sub(pattern, "", msg)
+
+            else:
+                msg = q
+
+            return msg
+
+        def __set_nextstep(self, basenext: int, msg: str, idx: int = 0) -> int:
+            # |"goto":7|を抽出
+            pattern = r"\|(.*?)\|"
+            command = re.findall(pattern, msg)  # 正規表現で抽出
+            if len(command) == 0:
+                nextstep = basenext
+            elif "goto" in command[0]:
+                no = int(command[0].split(":")[1].split(",")[idx])
+                nextstep = no
+            else:
+                nextstep = basenext
+
+            self.nextstep = nextstep        
+            return nextstep
+
+
+        def is_eoq(self):
+            return self.currstep is None
+
+        def is_userturn(self):
+            return self.f_userturn
+
+        def set_questions(self, fn: str):
+            """
+            normal: その文章をGPTに投げて回答を受け取った後、ユーザーからのインプットを待つ
+            if: その文章をGPTに投げて得られた回答にJSON文が含まれていたら、次のQにステップを進める（投げる）
+            gotonext: その文章をGPTに投げて回答を得た後、ユーザーメッセージを受け取らずに次の質問に移る
+            """
+            qlist = []
+            with open(fn, "r", encoding='utf-8') as f:
+                l_txt = [part.strip() for part in f.read().split("==========") if part.strip()]
+                for s in l_txt:
+                    l = s.split('----------')
+                    if len(l) == 3:
+                        qlist.append({"id": int(l[0]), "type": l[2].strip(), "q": l[1].strip()})
+                    else:
+                        print("スクリプトファイルがおかしいかも？")
+                        exit(0)
+
+            qlist = [
+                {**item, "nextid": qlist[i + 1]["id"] if i + 1 < len(qlist) else None}
+                for i, item in enumerate(qlist)
+            ]
+
+            # 重複チェック
+            l_id = [x['id'] for x in qlist]
+            l_id_dup = set(x for x in l_id if l_id.count(x) > 1)
+            if l_id_dup:
+                print(f"idが重複しています {l_id_dup}")
+                exit(0)
+
+            # IDチェック（intかどうか）
+            if not all(isinstance(item, int) for item in l_id):
+                print(f"IDがint型じゃないものがあります。 {l_id}")
+                exit(0)
+
+            self.currstep = qlist[0]['id']
+            self.nextstep = self.currstep  # 一番初めは、同じ値をセットしておく
+            self.qlist = qlist
+
+        def post_registered_question(self) -> str:
+            if self.f_userturn:
+                print("ユーザーの入力を先にしてください。")
+                return
+            
+            self.currstep = self.nextstep
+            if self.currstep is None:
+                print("設定質問は以上です")
+                return None
+
+            q = self.__get_qdata(self.currstep)
+            msg = self.__adjust_q(q['q'])
+
+            if q['type'] not in ['dalle']:
+                # dalleは画像生成するので、プロンプトを投げない
+                self.mo.create_message(msg)
+                response = self.mo.run(True)
+                self.log.append({"role": "assistant", "msg":response, "baseqid": self.currstep})
+            else:
+                # dalleではresponseはないので、空を作っておく
+                response = ""
+
+            if q['type'] == 'normal':
+                self.f_userturn = True
+                self.__set_nextstep(q['nextid'], msg)
+            elif q['type'] == 'if':
+                j = self.mo.myjson(response)
+                if j is not None:
+                    self.f_if_ng = False
+                    self.f_userturn = False  # 判定OKなら、次の質問を流す
+                    self.__set_nextstep(q['nextid'], msg, 0)
+                else:
+                    self.f_if_ng = True
+                    self.f_userturn = True  # NGの場合は、修正回答をユーザーからもらう
+                    self.__set_nextstep(self.currstep, msg, 1)
+                    #もし移動先指定があったら、userturnはFalseになる
+                    if self.currstep != self.nextstep : #通常は、NGの場合はcurrstepとnextstepが一緒になる
+                        self.f_userturn = False
+
+            elif q['type'] == 'gotonext':
+                self.f_userturn = False
+                self.__set_nextstep(q['nextid'], msg)
+            elif q['type'] == 'dalle':
+                # 画像生成処理
+                unique_id = uuid.uuid4()
+                filename = f"gazou_{unique_id}.png"
+                self.mo.image_generate(
+                    msg,
+                    size="256x256",
+                    model='dall-e-2',
+                    filename=filename,
+                )
+                self.log.append({"role": "dalle", "msg": filename, "baseqid": self.currstep})
+                self.f_userturn = False
+                self.__set_nextstep(q['nextid'], msg) 
+            else:
+                print(f"type設定がおかしいかも？ : qno = {q['id']}")
+                exit(0)
+
+            return response
+
+        def set_usermessage(self, msg: str):
+            self.mo.create_message(msg)
+            self.log.append({"role": "user", "msg": msg, "baseqid": None})
+            self.f_userturn = False
+
+
+
+
 
 
 def tanjun() :
