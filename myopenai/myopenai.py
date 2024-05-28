@@ -610,6 +610,7 @@ class myopenai :
                     model=model,
                     filename=filename,
                 )
+                response = filename
                 self.log.append({"role": "dalle", "msg": filename, "baseqid": self.currstep})
                 self.f_userturn = False
                 self.__set_nextstep(q['nextid'], origmsg) 
