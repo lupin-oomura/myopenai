@@ -618,7 +618,7 @@ class myopenai :
 
 
         def post_registered_question(self, f_printlog:bool=False, f_stream:bool=False) -> str:
-            self.token_queue.clear() #念のためトークンをクリアしとく
+            self.token_queue_gpts.clear() #念のためトークンをクリアしとく
 
             print(f"f_threading={f_stream}")
             if self.f_userturn:
