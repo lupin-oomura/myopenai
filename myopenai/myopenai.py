@@ -86,7 +86,6 @@ class myopenai :
 
         self.gpts = self.mygpts(self)
 
-
     def set_prompt(self, txt:str):
         self.assistant = self.client.beta.assistants.update(
             assistant_id=self.assistant.id,
@@ -444,6 +443,8 @@ class myopenai :
             self.mo = mo                # myopenaiのインスタンス
             self.qlist = []
             self.log = []
+            self.currentcmd   = ""      #どのコマンドが直前で流れたかを保持
+
 
 
         
@@ -475,14 +476,14 @@ class myopenai :
             return msg
         
         def __get_dalle_option(self, q) :
-            # |"goto":7|を抽出
+            # |"dall-e-3":7|を抽出
             pattern = r"\|dalle:(.*?)\|"
             command = re.findall(pattern, q)  # 正規表現で抽出
             model = None
             size  = None
             for c in command : 
-                model = c.split(",")[0]
-                size  = c.split(",")[1]
+                model = c.split(",")[0].strip()
+                size  = c.split(",")[1].strip()
                 break #複数あっても、最初の１つだけ
 
             return model, size
@@ -503,6 +504,8 @@ class myopenai :
         def get_log(self) :
             return self.log
         
+        def get_currentcommand(self) :
+            return self.currentcmd
 
         def is_eoq(self):
             return self.currstep is None
@@ -561,6 +564,7 @@ class myopenai :
             q = self.__get_qdata(self.currstep)
             origmsg = q['q']
             msg = self.__adjust_q(origmsg)
+            self.currentcmd = q['type']
 
             if q['type'] not in ['dalle']:
                 # dalleは画像生成するので、プロンプトを投げない
