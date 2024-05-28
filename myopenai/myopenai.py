@@ -8,6 +8,8 @@ import re #正規表現チェック用
 import uuid
 from collections import deque
 import requests #画像downloadで使用
+import threading
+import time
 
 #ハンドラー用
 from typing_extensions import override
@@ -142,7 +144,7 @@ class myopenai :
     def is_running(self) :
         return self.f_running
     
-    def run(self, f_stream:bool=True, f_print=True) -> str :
+    def run(self, f_stream:bool=True, f_print:bool=True) -> str :
         self.f_running = True
 
         self.handler = self.EventHandler(self.mystreamlit)
@@ -189,6 +191,11 @@ class myopenai :
     #     token = mo.get_queue()
     #     if token :
     #         print(f"token: [{token}]")
+    # #最後の残りかすトークン
+    # token = mo.get_queue()
+    # if token :
+    #     print(f"token: [{token}]")
+    
 
 
     def get_lastmsg(self) -> str :
@@ -496,10 +503,10 @@ class myopenai :
             self.f_userturn = False     # このフラグが立っていたら、ユーザーメッセージを入れる
             self.f_if_ng = True         # type=ifでNGになった場合、フラグが立つ(特に使ってないけど、いずれ何かに使いそう)
             self.mo = mo                # myopenaiのインスタンス
-            self.qlist = []
-            self.log = []
-            self.currentcmd   = ""      #どのコマンドが直前で流れたかを保持
-
+            self.qlist              = []
+            self.log                = []
+            self.currentcmd         = ""        #どのコマンドが直前で流れたかを保持
+            self.token_queue_gpts   = deque()   #gptsのpost_commandでもテケテケ表示できるように
 
 
         
@@ -606,11 +613,16 @@ class myopenai :
             self.nextstep = self.currstep  # 一番初めは、同じ値をセットしておく
             self.qlist = qlist
 
-        def post_registered_question(self, f_printlog:bool=False) -> str:
+
+
+
+
+        def post_registered_question(self, f_printlog:bool=False, f_stream:bool=False) -> str:
+            print(f"f_threading={f_stream}")
             if self.f_userturn:
                 print("ユーザーの入力を先にしてください。")
-                return
-            
+                return None
+    
             self.currstep = self.nextstep
             if self.currstep is None:
                 print("設定質問は以上です")
@@ -620,11 +632,32 @@ class myopenai :
             origmsg = q['q']
             msg = self.__adjust_q(origmsg)
             self.currentcmd = q['type']
+            print(f"msg=[{msg}], cmd=[{self.currentcmd}]")
 
-            if q['type'] not in ['dalle']:
-                # dalleは画像生成するので、プロンプトを投げない
+
+            if self.currentcmd not in ['dalle']: # dalleは画像生成するので、プロンプトを投げない
                 self.mo.create_message(msg)
-                response = self.mo.run(True)
+                if f_stream :
+                    thread = threading.Thread(target=self.mo.run, kwargs={'f_stream':True, 'f_print':False})
+                    thread.start()
+                    time.sleep(0.1)
+                    while self.mo.is_running() :
+                        time.sleep(0.1)
+                        token = self.mo.get_queue()
+                        if token :
+                            self.token_queue_gpts.append(token)
+                    #最後の残りかすトークン
+                    token = self.mo.get_queue()
+                    if token :
+                        self.token_queue_gpts.append(token)
+                    self.token_queue_gpts.append('[[end]]') #終了サイン
+                else :
+                    self.mo.run()
+                    print(response)
+                    self.token_queue_gpts.append(response) #Threading実行されてることもあるし、念のためトークンキューにも入れておく
+                    self.token_queue_gpts.append("[[end]]")
+
+                response = self.mo.get_lastmsg()
                 self.log.append({"role": "assistant", "msg":response, "baseqid": self.currstep})
             else:
                 # dalleではresponseはないので、空を作っておく
@@ -674,6 +707,15 @@ class myopenai :
                 exit(0)
 
             return response
+
+        #--- テケテケ表示に欠かせない関数(GPTs版) -----------------#
+        def get_gpts_queue(self)->deque :
+            token = ""
+            if self.token_queue_gpts :
+                token = self.token_queue_gpts.popleft() #[[end]]を切り分けたいので、合体ループは使わない
+            return token
+        
+
 
         def set_usermessage(self, msg: str):
             self.mo.create_message(msg)
