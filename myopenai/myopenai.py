@@ -618,6 +618,8 @@ class myopenai :
 
 
         def post_registered_question(self, f_printlog:bool=False, f_stream:bool=False) -> str:
+            self.token_queue.clear() #念のためトークンをクリアしとく
+
             print(f"f_threading={f_stream}")
             if self.f_userturn:
                 print("ユーザーの入力を先にしてください。")
@@ -699,6 +701,8 @@ class myopenai :
                     filename=filename,
                 )
                 response = filename
+                self.token_queue_gpts.append(filename) #Threading実行されてるとき用
+                self.token_queue_gpts.append('[[end]]') #これがないとThreading実行の時に無限ループに陥る
                 self.log.append({"role": "dalle", "msg": filename, "baseqid": self.currstep})
                 self.f_userturn = False
                 self.__set_nextstep(q['nextid'], origmsg) 
