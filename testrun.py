@@ -4,6 +4,10 @@ import myopenai
 from dotenv import load_dotenv
 load_dotenv()
 
+import threading
+import time
+
+
 #--------------------------------------------------------#
 #--- 普通のチャット --------------------------------------#
 #--------------------------------------------------------#
@@ -14,6 +18,28 @@ mo.create_message("大谷翔平の誕生日は？")
 mo.run()
 mo.create_message("では、性別は？")
 mo.run()
+
+#--------------------------------------------------------#
+#--- テケテケ表示チャット ---------------------------------#
+#--------------------------------------------------------#
+def threadrun() :
+    thread = threading.Thread(target=mo.run, kwargs={'f_stream':True, 'f_print':False})
+    thread.start()
+    time.sleep(0.1)
+    while mo.is_running() :
+        time.sleep(0.1)
+        token = mo.get_queue()
+        if token :
+            print(f"token: [{token}]")
+
+mo = myopenai.myopenai()
+mo.set_prompt("")
+mo.create_thread()
+mo.create_message("大谷翔平の誕生日は？")
+threadrun()
+mo.create_message("では、性別は？")
+threadrun()
+
 # thread_idを保存しておけば、会話を続けられる
 threadid = mo.get_threadid()
 print(threadid) #このthread_idをメモっておいてください

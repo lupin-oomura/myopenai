@@ -6,7 +6,7 @@ import datetime
 import json
 import re #正規表現チェック用
 import uuid
-
+from collections import deque
 import requests #画像downloadで使用
 
 #ハンドラー用
@@ -18,11 +18,16 @@ class myopenai :
     #--- ストリーミング表示用の、イベントハンドラークラス -----------#
     #------------------------------------------------------------#
     class EventHandler(AssistantEventHandler):
-        assistant_reply = ""
-        reply_placeholder = None
+        assistant_reply     = ""
+        reply_placeholder   = None
+        token_queue         = None  #GPTの回答がどしどし入る箱
+        f_print             = True  #コンソールにテケテケ出力する場合、True
 
         def __init__(self, myst=None):
             super().__init__()  # 親クラスの初期化メソッドを呼び出す
+            self.token_queue = deque()
+            self.token_queue.clear()
+
             if myst is not None :
                 self.assistant_reply = ""
                 self.reply_placeholder = myst.empty()
@@ -38,11 +43,17 @@ class myopenai :
 
         @override
         def on_text_delta(self, delta, snapshot):
+            self.token_queue.append(delta.value)
+
             if self.reply_placeholder is None :
-                print(delta.value, end="", flush=True)
+                if self.f_print :
+                    print(delta.value, end="", flush=True)
             else :
                 self.assistant_reply += delta.value
                 self.reply_placeholder.markdown(self.assistant_reply)
+
+        def set_printflag(self, f_print) :
+            self.f_print = f_print 
 
         #--- メモ: OpenAIのAPI情報に乗ってたが、この関数を使わなくてもストリーミング表示できたので、一旦コメントアウト
         # def on_tool_call_created(self, tool_call):
@@ -67,12 +78,15 @@ class myopenai :
     thread       = None
     messages     = None
     mystreamlit  = None
-    unique_id    = None #ユーザー固有のID（音声ファイルとかの名前になる）
-    gpts         = None #mygptsクラスのインスタンス
+    unique_id    = None     #ユーザー固有のID（音声ファイルとかの名前になる）
+    gpts         = None     #mygptsクラスのインスタンス
+    f_running    = False    #Run処理が回っている場合Trueになる
+    handler      = None     #Runが回っている間、EventHandlerが入る
 
     def __init__(self, myst=None, model:str="gpt-4o", systemmessage:str="") :
         self.unique_id = str(uuid.uuid4())
         self.client = OpenAI()
+        self.f_running = False
         self.mystreamlit = myst
 
         self.assistant = self.client.beta.assistants.create(
@@ -111,15 +125,38 @@ class myopenai :
             role="user",
         )
 
-    def run(self, f_stream:bool=True) -> str :
+    #--- テケテケ表示に欠かせない関数 -----------------#
+    def get_queue(self)->deque :
+        token = ""
+        while self.handler.token_queue :
+            token += self.handler.token_queue.popleft()
+
+        return token
+    
+    # def set_queue(self, txt:str) :
+    #     self.token_queue.append(txt)
+
+    # def reset_queue(self) :
+    #     self.token_queue.clear()
+    
+    def is_running(self) :
+        return self.f_running
+    
+    def run(self, f_stream:bool=True, f_print=True) -> str :
+        self.f_running = True
+
+        self.handler = self.EventHandler(self.mystreamlit)
+        self.handler.set_printflag(f_print)
+
         if f_stream :
             with self.client.beta.threads.runs.stream(
                 thread_id     = self.thread.id,
                 assistant_id  = self.assistant.id,
-                event_handler = self.EventHandler(self.mystreamlit),
+                event_handler = self.handler,
             ) as stream:
                 stream.until_done()
             print('\n')
+            #最後のキュー取得とかしなきゃいけないので、まだHandlerは閉じない
 
         else :
             run = self.client.beta.threads.runs.create_and_poll(
@@ -128,14 +165,31 @@ class myopenai :
             )
 
             if run.status != 'completed': 
-                print(run.status)
+                print(f"error ??? : {run.status}")
 
         self.messages = self.client.beta.threads.messages.list(
             thread_id = self.thread.id,
         )
 
         msg = self.get_lastmsg()
+        self.f_running = False
         return msg 
+    
+    #テケテケ表示させる場合のサンプル（threadingで実行する必要あり）
+    # mo = myopenai.myopenai()
+    # mo.set_prompt("")
+    # mo.create_thread()
+    # mo.create_message("大谷翔平の誕生日は？")
+
+    # thread = threading.Thread(target=mo.run, kwargs={'f_stream':True, 'f_print':False})
+    # thread.start()
+    # time.sleep(0.1) #これがないと、is_runningが立つ前に処理が走ってすぐに終わってしまう。
+    # while mo.is_running() :
+    #     time.sleep(0.1)
+    #     token = mo.get_queue()
+    #     if token :
+    #         print(f"token: [{token}]")
+
 
     def get_lastmsg(self) -> str :
         return f"{self.messages.data[0].content[-1].text.value}"
@@ -262,6 +316,7 @@ class myopenai :
                 print("----------------------------------")
 
         return jsondata
+
 
     # def getdata_from_vtt(self, vtt_file_path:str) -> list :
 
