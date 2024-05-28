@@ -548,7 +548,7 @@ class myopenai :
             self.nextstep = self.currstep  # 一番初めは、同じ値をセットしておく
             self.qlist = qlist
 
-        def post_registered_question(self) -> str:
+        def post_registered_question(self, f_printlog:bool=False) -> str:
             if self.f_userturn:
                 print("ユーザーの入力を先にしてください。")
                 return
@@ -598,6 +598,8 @@ class myopenai :
                 unique_id = uuid.uuid4()
                 filename = f"gazou_{unique_id}.png"
                 model, size = self.__get_dalle_option(origmsg)
+                if f_printlog :
+                    print(f"model=[{model}], size=[{size}], filename=[{filename}], msg=[{msg}]")
                 self.mo.image_generate(
                     msg,
                     size=size,
