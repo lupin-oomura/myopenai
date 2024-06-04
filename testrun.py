@@ -8,22 +8,22 @@ import threading
 import time
 
 
-#--------------------------------------------------------#
-#--- 普通のチャット --------------------------------------#
-#--------------------------------------------------------#
-mo = myopenai.myopenai()
-mo.set_prompt("")
-mo.create_thread()
-mo.create_message("猫の絵を生成して")
-msg = mo.run(f_stream=False)
-print(msg["text"])
-if "image" in msg :
-    print(f'画像もあります。{msg["image"]}')
+# #--------------------------------------------------------#
+# #--- 普通のチャット --------------------------------------#
+# #--------------------------------------------------------#
+# mo = myopenai.myopenai()
+# mo.set_prompt("")
+# mo.create_thread()
+# mo.create_message("猫の絵を生成して")
+# msg = mo.run(f_stream=False)
+# print(msg["text"])
+# if "image" in msg :
+#     print(f'画像もあります。{msg["image"]}')
 
-mo.create_message("大谷翔平の誕生日は？")
-mo.run(f_stream=False)
-mo.create_message("では、性別は？")
-mo.run()
+# mo.create_message("大谷翔平の誕生日は？")
+# mo.run(f_stream=False)
+# mo.create_message("では、性別は？")
+# mo.run()
 
 
 # #--------------------------------------------------------#
@@ -87,116 +87,38 @@ mo.run()
     |goto:9,4| → if文の時は、このように2つ指定する必要あり。OKの場合は9番、NGの場合は4番に飛ぶ。NGでもis_userturn()=Falseになるのでその点注意。
 """
 
-
-commands = """
-==========
-1
-----------
-私に、「こんにちわ。赤と白はどちらが好きですか」と質問してください。
-|goto:2|
-----------
-normal
-==========
-2
-----------
-私はどちらの色を選びましたか？
-もし赤を選んだら、JSON形式で出力してください。
-```json
-{"選択色": "赤"}
-```
-もし赤以外を選んでいたら、もう一度質問してください。（赤を選択するまで、同じ質問を繰り返してください。）
-----------
-if
-==========
-3
-----------
-「あなたは、○○の色が好きなんですね」と言ってください。
-----------
-gotonext
-==========
-4
-----------
-「どんなテーマが良いですか？今パッと思いついたことを話してください。」と言ってください。
-----------
-normal
-==========
-5
-----------
-話したテーマに関するイラストを、私の選んだ色をベース色にして生成してもらいたいです。
-そのイラスト生成するためのプロンプトを、英語でJSON形式で出力してください。
-```json
-{"prompt":"prompt for generating an illustration of the message in English"}
-```
-----------
-gotonext
-==========
-6
-----------
-{jsonresult:5,prompt}
-|dalle:dall-e-2,256x256|
-----------
-dalle
-==========
-7
-----------
-私は今、dalleで生成したイラストを見ています。
-そのイラストが気に入ったかどうかを私に聞いてください。
-----------
-normal
-==========
-8
-----------
-私はイラストを気に入っていますか？
-気に入っているようなら、以下のように出力してください。
-```json
-{"イラスト納得":"Yes"}
-気に入っていない場合や、追加要望があった場合は、「了解です。」とだけプロンプトに出力してください。それ以外の文章は不要です。
-|goto:9,4|
-----------
-if
-==========
-9
-----------
-「お疲れさまでした。」と言ってください。
-----------
-gotonext
-==========
-"""
-with open("commanddata.txt", "w", encoding="utf-8") as f:
-    f.write(commands)
-
-
-mo = myopenai.myopenai()
-mo.set_prompt("あなたは優秀なコピーライターです。今から私にいろいろと質問をし、その回答に基づいてイラストを生成してもらいます。")
+mo = myopenai.myopenai(
+        model='gpt-4o', 
+        systemmessage='あなたは刻印デザイナーです。私にいろいろと質問することでユーザーの好みを把握し、そのイメージ通りの刻印イメージを生成します。'
+)
 mo.create_thread()
+mo.gpts.set_questions(f"commanddata2.txt")
 
-def threadrun() :
-    thread = threading.Thread(target=mo.gpts.post_registered_question, kwargs={'f_stream':True,})
-    thread.start()
-    time.sleep(0.1)
-    token = ""
-    while token != "[[end]]" :
-        time.sleep(0.1)
-        token = mo.gpts.get_gpts_queue()
-        if token :
-            print(f"token: [{token}]")
 
-mo.gpts.set_questions("commanddata.txt")
-
+mo.gpts.set_usermessage("こんにちは")
 while not mo.gpts.is_eoq():
-    threadrun()
-    # mo.gpts.post_registered_question()
-    if mo.gpts.is_userturn():
-        msg = input("msg:")
-        mo.gpts.set_usermessage(msg)
+    while not mo.gpts.is_userturn() :
 
-        log = mo.gpts.get_log()
-        print(log)
+        thread = threading.Thread(target=mo.gpts.post_registered_question, kwargs={'f_stream':False,})
+        thread.start()
+        time.sleep(0.1)
+        token = ""
+        while thread.is_alive() or mo.gpts.token_queue_gpts.qsize() > 0 :
+            time.sleep(0.1)
+            token = mo.gpts.get_gpts_queue()
+            if token :
+                print(f"token: [{token}]")
+
+        f = mo.gpts.is_passcase()
+        print(f"is pass = {f}")
+        thread.join()
 
 
+    msg = input("msg:")
+    mo.gpts.set_usermessage(msg)
 
-
-
+        # log = mo.gpts.get_log()
+        # print(log)
 
 
 

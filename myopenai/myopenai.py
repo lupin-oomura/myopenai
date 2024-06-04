@@ -30,8 +30,7 @@ class myopenai :
 
         def __init__(self, myst=None):
             super().__init__()  # 親クラスの初期化メソッドを呼び出す
-            self.token_queue = deque()
-            self.token_queue.clear()
+            self.token_queue = queue.Queue()
 
             if myst is not None :
                 self.assistant_reply = ""
@@ -48,7 +47,7 @@ class myopenai :
 
         @override
         def on_text_delta(self, delta, snapshot):
-            self.token_queue.append(delta.value)
+            self.token_queue.put(delta.value)
 
             if self.reply_placeholder is None :
                 if self.f_print :
@@ -135,9 +134,8 @@ class myopenai :
     #--- テケテケ表示に欠かせない関数 -----------------#
     def get_queue(self)->deque :
         token = ""
-        while self.handler.token_queue :
-            token += self.handler.token_queue.popleft()
-
+        while self.handler.token_queue.qsize() > 0 :
+            token += self.handler.token_queue.get()
         return token
     
     # def set_queue(self, txt:str) :
@@ -184,10 +182,13 @@ class myopenai :
             thread_id = self.thread.id,
         )
 
+        response = self.get_lastmsg()
+        print(f"response = {response}")
+
         # msgsに取り込み
-        l_msgs_prev = len(self.msgs) 
+        len_msgs_prev = len(self.msgs) 
         for index, msg in enumerate(self.messages.data) :
-            if index >= len(self.messages.data) - l_msgs_prev :
+            if index >= len(self.messages.data) - len_msgs_prev :
                 break
             itm = {}
             for cont in msg.content :
@@ -212,7 +213,7 @@ class myopenai :
             self.msgs.insert(index, itm)
 
         self.f_running = False
-        return self.msgs[0] 
+        return response 
     
     #テケテケ表示させる場合のサンプル（threadingで実行する必要あり）
     # mo = myopenai.myopenai()
@@ -717,7 +718,7 @@ class myopenai :
                     self.token_queue_gpts.put('[[end]]') #終了サイン
                 else :
                     response = self.mo.run(f_stream=False)
-                    self.token_queue_gpts.put(response["text"]) #Threading実行されてることもあるし、念のためトークンキューにも入れておく
+                    self.token_queue_gpts.put(response) #Threading実行されてることもあるし、念のためトークンキューにも入れておく
                     self.token_queue_gpts.put("[[end]]")
 
                 response = self.mo.get_lastmsg()
