@@ -611,6 +611,7 @@ class myopenai :
         def is_passcase(self) :
             #今がif/gotonextで、かつ次のステップに進もうとしている場合は、JSON出力とかなので、スルー
             if self.currentcmd in ["if", "gotonext"] and self.currstep != self.nextstep :
+                print(f"passcase: current command={self.currentcmd}, currstep={self.currstep}, nextstep={self.nextstep}")
                 return True
             else :
                 return False
@@ -774,10 +775,12 @@ class myopenai :
 
 
 
+
 class gpts_handler :
     mo            = None
     imgcount      = 0
     que_message   = None
+    f_done        = True
 
     def __init__(self, fn_scripts:str, gptmodel:str, system_prompt:str=None) :
         self.mo = myopenai.myopenai(model=gptmodel)
@@ -786,11 +789,18 @@ class gpts_handler :
         self.mo.create_thread()
         self.mo.gpts.set_questions(fn_scripts)
         self.que_message = queue.Queue()
+        self.f_done = True
+
+    def is_done(self) :
+        return self.f_done
+    def get_queue(self) :
+        return self.que_message
 
     def chat(self, user_msg:str, f_stream:bool=True):
         if self.mo.gpts.is_eoq() :
             res = "既に終了"
         else :
+            self.f_done = False
             self.mo.gpts.set_usermessage(user_msg)
             while not self.mo.gpts.is_userturn() :
                 #画像生成だったら、時間がかかるので作成中サインを送る
@@ -825,14 +835,17 @@ class gpts_handler :
                 if self.mo.gpts.get_currentcommand() == 'dalle' :
                     #画像生成の時の処理
                     self.imgcount += 1
-                    self.que_message.put(f"{res}, {str(self.imgcount)}")
+                    self.que_message.put(f"dalle:{res}, {str(self.imgcount)}")
 
                 else :
                     #それ以外＝普通のレスポンスの処理
                     #今がif/gotonextで、かつ次のステップに進もうとしている場合は、JSON出力とかなので、スルー
                     if not self.mo.gpts.is_passcase() :
                         self.que_message.put(res)
+                    else :
+                        print(f"skipped: {res}")
 
+            self.f_done = True
 
 
 
