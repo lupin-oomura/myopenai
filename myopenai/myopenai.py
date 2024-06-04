@@ -544,6 +544,7 @@ class myopenai :
             self.currentcmd         = ""        #どのコマンドが直前で流れたかを保持
             self.token_queue_gpts   = queue.Queue()   #gptsのpost_commandでもテケテケ表示できるように
             self.imgcount           = 0         #ダリで作った画像の連番
+            self.f_goto             = False     #gotoコマンドで変化球になった場合
 
         
         def __get_qdata(self, id: int) -> dict:
@@ -587,13 +588,15 @@ class myopenai :
             return model, size
 
         def __set_nextstep(self, basenext: int, msg: str, idx: int = 0) -> int:
-            # |"goto":7|を抽出
+            # |goto:7|を抽出
             pattern = r"\|goto:(.*?)\|"
             command = re.findall(pattern, msg)  # 正規表現で抽出
             nextstep = basenext
+            self.f_goto = False
             for c in command : 
                 no = int(c.split(",")[idx])
                 nextstep = no
+                self.f_goto = True
                 break #複数あっても、最初の１つだけ
 
             self.nextstep = nextstep        
@@ -611,12 +614,19 @@ class myopenai :
 
         def is_passcase(self) :
             #今がif/gotonextで、かつ次のステップに進もうとしている場合は、JSON出力とかなので、スルー
-            if self.currentcmd in ["if", "gotonext"] and self.currstep != self.nextstep :
-                print(f"passcase: current command={self.currentcmd}, currstep={self.currstep}, nextstep={self.nextstep}")
-                return True
+            flg = False 
+            if self.currentcmd == ["if"] and self.f_if_ng == False :
+                flg = True
+            elif self.currentcmd == ["gotonext_without_response"] :
+                flg = True
             else :
-                return False
+                flg = False
 
+            if flg == True :
+                print(f"passcase: current command={self.currentcmd}, currstep={self.currstep}, nextstep={self.nextstep}")
+
+            return flg
+        
         def is_eoq(self):
             return self.currstep is None
 
@@ -628,6 +638,7 @@ class myopenai :
             normal: その文章をGPTに投げて回答を受け取った後、ユーザーからのインプットを待つ
             if: その文章をGPTに投げて得られた回答にJSON文が含まれていたら、次のQにステップを進める（投げる）
             gotonext: その文章をGPTに投げて回答を得た後、ユーザーメッセージを受け取らずに次の質問に移る
+            gotonext_without_response: その文章をGPTに投げて回答を得た後、ユーザーメッセージを受け取らずに次の質問に移る。しかもGPTの出力もしない
             """
             qlist = []
             with open(fn, "r", encoding='utf-8') as f:
@@ -734,7 +745,7 @@ class myopenai :
                     if self.currstep != self.nextstep : #通常は、NGの場合はcurrstepとnextstepが一緒になる
                         self.f_userturn = False
 
-            elif q['type'] == 'gotonext':
+            elif q['type'] in ['gotonext', "gotonext_without_response"]:
                 self.f_userturn = False
                 self.__set_nextstep(q['nextid'], origmsg)
 
@@ -769,7 +780,7 @@ class myopenai :
             return self.f_running
         
         #--- テケテケ表示に欠かせない関数(GPTs版) -----------------#
-        def get_gpts_queue(self)->deque :
+        def get_gpts_queue(self)->str :
             token = ""
             if self.token_queue_gpts.qsize() > 0 :
                 token = self.token_queue_gpts.get() #[[end]]を切り分けたいので、合体ループは使わない
