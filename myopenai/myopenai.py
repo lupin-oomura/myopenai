@@ -619,6 +619,8 @@ class myopenai :
                 flg = True
             elif self.currentcmd == "gotonext_without_response" :
                 flg = True
+            elif self.currentcmd == "dalle" :
+                flg = True
             else :
                 flg = False
 
