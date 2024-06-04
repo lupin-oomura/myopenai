@@ -601,6 +601,10 @@ class myopenai :
         def get_currentcommand(self) :
             return self.currentcmd
 
+        def get_nextcommand(self) :
+            q = self.__get_qdata(self.nextstep)
+            return q['type']
+
         def is_eoq(self):
             return self.currstep is None
 
