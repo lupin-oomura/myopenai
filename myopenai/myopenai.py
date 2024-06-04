@@ -84,12 +84,14 @@ class myopenai :
     gpts         = None     #mygptsクラスのインスタンス
     f_running    = False    #Run処理が回っている場合Trueになる
     handler      = None     #Runが回っている間、EventHandlerが入る
+    msgs         = []    #self.messagesから重要な要素だけ抜き出したローカルメッセージーズ
 
     def __init__(self, myst=None, model:str="gpt-4o", systemmessage:str="") :
         self.unique_id = str(uuid.uuid4())
         self.client = OpenAI()
         self.f_running = False
         self.mystreamlit = myst
+        self.msgs        = []
 
         self.assistant = self.client.beta.assistants.create(
             # name="感謝と半生",
@@ -144,6 +146,12 @@ class myopenai :
     def is_running(self) :
         return self.f_running
     
+    def __get_and_save_file(self, file_id, file_name) :
+        retrieve_file = self.client.files.with_raw_response.content(file_id)
+        content: bytes = retrieve_file.content
+        with open(file_name, 'wb') as f:
+            f.write(content)
+
     def run(self, f_stream:bool=True, f_print:bool=True) -> str :
         self.f_running = True
 
@@ -173,9 +181,35 @@ class myopenai :
             thread_id = self.thread.id,
         )
 
-        msg = self.get_lastmsg()
+        # msgsに取り込み
+        l_msgs_prev = len(self.msgs) 
+        for index, msg in enumerate(self.messages.data) :
+            if index >= len(self.messages.data) - l_msgs_prev :
+                break
+            itm = {}
+            for cont in msg.content :
+                if type(cont) is openai.types.beta.threads.text_content_block.TextContentBlock :
+                    print("Text")
+                    itm["text"] = cont.text.value
+
+                elif type(cont) is openai.types.beta.threads.image_file_content_block.ImageFileContentBlock :
+                    file_id = cont.image_file.file_id
+                    fn = f"{file_id}.png"
+                    self.__get_and_save_file(file_id, fn)
+                    itm["image"] = fn
+
+            # #一度attachmentsに画像が入ってたことがあったけど、1度しか出なかったのでとりあえずスルー。原則attachmentはユーザーがブツを投げるためのもの
+            # for at in msg.attachments :
+            #     print(at.file_id)
+            #     file_id = at.file_id
+            #     fn = f"{file_id}.png"
+            #     self.__get_and_save_file(file_id, fn)
+            #     itm["image"] = fn
+
+            self.msgs.insert(index, itm)
+
         self.f_running = False
-        return msg 
+        return self.msgs[0] 
     
     #テケテケ表示させる場合のサンプル（threadingで実行する必要あり）
     # mo = myopenai.myopenai()
@@ -196,8 +230,6 @@ class myopenai :
     # if token :
     #     print(f"token: [{token}]")
     
-
-
     def get_lastmsg(self) -> str :
         return f"{self.messages.data[0].content[-1].text.value}"
 

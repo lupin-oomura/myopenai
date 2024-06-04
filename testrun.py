@@ -8,16 +8,23 @@ import threading
 import time
 
 
-# #--------------------------------------------------------#
-# #--- 普通のチャット --------------------------------------#
-# #--------------------------------------------------------#
-# mo = myopenai.myopenai()
-# mo.set_prompt("")
-# mo.create_thread()
-# mo.create_message("大谷翔平の誕生日は？")
-# mo.run(f_stream=False)
-# mo.create_message("では、性別は？")
-# mo.run()
+#--------------------------------------------------------#
+#--- 普通のチャット --------------------------------------#
+#--------------------------------------------------------#
+mo = myopenai.myopenai()
+mo.set_prompt("")
+mo.create_thread()
+mo.create_message("猫の絵を生成して")
+msg = mo.run(f_stream=False)
+print(msg["text"])
+if "image" in msg :
+    print(f'画像もあります。{msg["image"]}')
+
+mo.create_message("大谷翔平の誕生日は？")
+mo.run(f_stream=False)
+mo.create_message("では、性別は？")
+mo.run()
+
 
 # #--------------------------------------------------------#
 # #--- テケテケ表示チャット ---------------------------------#
