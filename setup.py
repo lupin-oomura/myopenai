@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name='myopenai',
-    version='0.5.9',
+    version='0.5.10',
     packages=find_packages(),
     install_requires=[
         'openai',

@@ -624,8 +624,7 @@ class myopenai :
             else :
                 flg = False
 
-            if flg == True :
-                print(f"passcase: current command={self.currentcmd}, currstep={self.currstep}, nextstep={self.nextstep}")
+            print(f"passcase: current command={self.currentcmd}, currstep={self.currstep}, nextstep={self.nextstep}")
 
             return flg
         
@@ -699,11 +698,9 @@ class myopenai :
             print(f"msg=[{msg}], cmd=[{self.currentcmd}]")
 
 
-            if self.get_nextcommand() == 'dalle' :
-                self.token_queue_gpts.put("[[next dalle]]")
-
             if self.currentcmd not in ['dalle']: # dalleは画像生成するので、プロンプトを投げない
                 self.mo.create_message(msg)
+                print(f"gpts --- no={self.currstep}, cmd={self.currentcmd}")
                 if f_stream :
                     thread = threading.Thread(target=self.mo.run, kwargs={'f_stream':True, 'f_print':False})
                     thread.start()
@@ -728,6 +725,10 @@ class myopenai :
             else:
                 # dalleではresponseはないので、空を作っておく
                 response = ""
+
+            if self.get_nextcommand() == 'dalle' :
+                self.token_queue_gpts.put("[[next dalle]]")
+
 
             if q['type'] == 'normal':
                 self.f_userturn = True
