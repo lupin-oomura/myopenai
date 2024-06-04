@@ -605,6 +605,12 @@ class myopenai :
             q = self.__get_qdata(self.nextstep)
             return q['type']
 
+        def is_passcase(self) :
+            if self.currentcmd in ["if", "gotonext"] and self.currstep != self.nextstep :
+                return True
+            else :
+                return False
+
         def is_eoq(self):
             return self.currstep is None
 
@@ -690,7 +696,7 @@ class myopenai :
                         self.token_queue_gpts.append(token)
                     self.token_queue_gpts.append('[[end]]') #終了サイン
                 else :
-                    self.mo.run()
+                    self.mo.run(f_stream=False)
                     print(response)
                     self.token_queue_gpts.append(response) #Threading実行されてることもあるし、念のためトークンキューにも入れておく
                     self.token_queue_gpts.append("[[end]]")
