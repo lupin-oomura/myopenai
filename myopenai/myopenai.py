@@ -691,7 +691,7 @@ class myopenai :
                     time.sleep(0.1)
                     while self.mo.is_running() :
                         time.sleep(0.1)
-                        token = self.mo.get_queue()
+                        token = self.mo.get_queue()["text"]
                         if token :
                             self.token_queue_gpts.append(token)
                     #最後の残りかすトークン
@@ -700,9 +700,8 @@ class myopenai :
                         self.token_queue_gpts.append(token)
                     self.token_queue_gpts.append('[[end]]') #終了サイン
                 else :
-                    self.mo.run(f_stream=False)
-                    print(response)
-                    self.token_queue_gpts.append(response) #Threading実行されてることもあるし、念のためトークンキューにも入れておく
+                    response = self.mo.run(f_stream=False)
+                    self.token_queue_gpts.append(response["text"]) #Threading実行されてることもあるし、念のためトークンキューにも入れておく
                     self.token_queue_gpts.append("[[end]]")
 
                 response = self.mo.get_lastmsg()
