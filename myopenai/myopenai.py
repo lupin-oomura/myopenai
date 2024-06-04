@@ -615,9 +615,9 @@ class myopenai :
         def is_passcase(self) :
             #今がif/gotonextで、かつ次のステップに進もうとしている場合は、JSON出力とかなので、スルー
             flg = False 
-            if self.currentcmd == ["if"] and self.f_if_ng == False :
+            if self.currentcmd == "if" and self.f_if_ng == False :
                 flg = True
-            elif self.currentcmd == ["gotonext_without_response"] :
+            elif self.currentcmd == "gotonext_without_response" :
                 flg = True
             else :
                 flg = False
