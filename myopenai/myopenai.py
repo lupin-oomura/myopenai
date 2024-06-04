@@ -542,7 +542,7 @@ class myopenai :
             self.qlist              = []
             self.log                = []
             self.currentcmd         = ""        #どのコマンドが直前で流れたかを保持
-            self.token_queue_gpts   = queue.QUeue()   #gptsのpost_commandでもテケテケ表示できるように
+            self.token_queue_gpts   = queue.Queue()   #gptsのpost_commandでもテケテケ表示できるように
             self.imgcount           = 0         #ダリで作った画像の連番
 
         
@@ -666,7 +666,7 @@ class myopenai :
 
 
         def post_registered_question(self, f_printlog:bool=False, f_stream:bool=False) -> str:
-            self.token_queue_gpts = queue.QUeue() #念のためトークンをクリアしとく
+            self.token_queue_gpts = queue.Queue() #念のためトークンをクリアしとく
             self.f_running = False 
 
             print(f"f_stream={f_stream}")
