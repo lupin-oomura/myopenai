@@ -537,12 +537,13 @@ class myopenai :
             self.nextstep = 0           # 次の質問。ifだと、stepと同じ値が入る
             self.f_userturn = False     # このフラグが立っていたら、ユーザーメッセージを入れる
             self.f_if_ng = True         # type=ifでNGになった場合、フラグが立つ(特に使ってないけど、いずれ何かに使いそう)
+            self.f_running = False      # post_registered_questionが動いているかどうか
             self.mo = mo                # myopenaiのインスタンス
             self.qlist              = []
             self.log                = []
             self.currentcmd         = ""        #どのコマンドが直前で流れたかを保持
             self.token_queue_gpts   = deque()   #gptsのpost_commandでもテケテケ表示できるように
-
+            self.imgcount           = 0         #ダリで作った画像の連番
 
         
         def __get_qdata(self, id: int) -> dict:
@@ -666,8 +667,9 @@ class myopenai :
 
         def post_registered_question(self, f_printlog:bool=False, f_stream:bool=False) -> str:
             self.token_queue_gpts.clear() #念のためトークンをクリアしとく
+            self.f_running = False 
 
-            print(f"f_threading={f_stream}")
+            print(f"f_stream={f_stream}")
             if self.f_userturn:
                 print("ユーザーの入力を先にしてください。")
                 return None
@@ -683,6 +685,9 @@ class myopenai :
             self.currentcmd = q['type']
             print(f"msg=[{msg}], cmd=[{self.currentcmd}]")
 
+
+            if self.get_nextcommand() == 'dalle' :
+                self.token_queue_gpts.append("[[next dalle]]")
 
             if self.currentcmd not in ['dalle']: # dalleは画像生成するので、プロンプトを投げない
                 self.mo.create_message(msg)
@@ -747,7 +752,8 @@ class myopenai :
                     filename=filename,
                 )
                 response = filename
-                self.token_queue_gpts.append(filename) #Threading実行されてるとき用
+                self.imgcount += 1
+                self.token_queue_gpts.append(f"dalle:{filename}, {str(self.imgcount)}") #Threading実行されてるとき用
                 self.token_queue_gpts.append('[[end]]') #これがないとThreading実行の時に無限ループに陥る
                 self.log.append({"role": "dalle", "msg": filename, "baseqid": self.currstep})
                 self.f_userturn = False
@@ -756,8 +762,12 @@ class myopenai :
                 print(f"type設定がおかしいかも？ : qno = {q['id']}")
                 exit(0)
 
+            self.f_running = False 
             return response
 
+        def is_running(self) :
+            return self.f_running
+        
         #--- テケテケ表示に欠かせない関数(GPTs版) -----------------#
         def get_gpts_queue(self)->deque :
             token = ""
@@ -766,86 +776,12 @@ class myopenai :
             return token
         
 
-
         def set_usermessage(self, msg: str):
             self.mo.create_message(msg)
             self.log.append({"role": "user", "msg": msg, "baseqid": None})
             self.f_userturn = False
 
 
-
-
-
-class gpts_handler :
-    mo            = None
-    imgcount      = 0
-    que_message   = None
-    f_done        = True
-
-    def __init__(self, fn_scripts:str, gptmodel:str, system_prompt:str=None) :
-        self.mo = myopenai.myopenai(model=gptmodel)
-        if system_prompt != None :
-            self.mo.set_systemprompt(system_prompt)
-        self.mo.create_thread()
-        self.mo.gpts.set_questions(fn_scripts)
-        self.que_message = queue.Queue()
-        self.f_done = True
-
-    def is_done(self) :
-        return self.f_done
-    def get_queue(self) :
-        return self.que_message
-
-    def chat(self, user_msg:str, f_stream:bool=True):
-        if self.mo.gpts.is_eoq() :
-            res = "既に終了"
-        else :
-            self.f_done = False
-            self.mo.gpts.set_usermessage(user_msg)
-            while not self.mo.gpts.is_userturn() :
-                #画像生成だったら、時間がかかるので作成中サインを送る
-                if self.mo.gpts.get_nextcommand() == 'dalle' :
-                    self.que_message.put("⌛画像生成中。30秒ほどお待ちください。⌛")
-
-                # #threadingでGPTを動かす
-                thread = threading.Thread(target=self.mo.gpts.post_registered_question, kwargs={'f_stream':f_stream,})
-                thread.start()
-                time.sleep(0.1)
-
-                token = ""
-                res   = ""
-                f_end = False
-                while not f_end :
-                    while True : #たまっているトークンをガサッと収集
-                        token = self.mo.gpts.get_gpts_queue()
-                        if not token : #トークンが空になったら抜ける
-                            break
-                        else :
-                            if token == "[[end]]" :
-                                f_end = True
-                                break
-                            else:
-                                res += token
-
-                    if res and not f_end :
-                        self.que_message.put(res)
-
-
-                #処理がDALLEだった場合
-                if self.mo.gpts.get_currentcommand() == 'dalle' :
-                    #画像生成の時の処理
-                    self.imgcount += 1
-                    self.que_message.put(f"dalle:{res}, {str(self.imgcount)}")
-
-                else :
-                    #それ以外＝普通のレスポンスの処理
-                    #今がif/gotonextで、かつ次のステップに進もうとしている場合は、JSON出力とかなので、スルー
-                    if not self.mo.gpts.is_passcase() :
-                        self.que_message.put(res)
-                    else :
-                        print(f"skipped: {res}")
-
-            self.f_done = True
 
 
 
