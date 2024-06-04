@@ -542,7 +542,7 @@ class myopenai :
             self.qlist              = []
             self.log                = []
             self.currentcmd         = ""        #どのコマンドが直前で流れたかを保持
-            self.token_queue_gpts   = deque()   #gptsのpost_commandでもテケテケ表示できるように
+            self.token_queue_gpts   = queue.QUeue()   #gptsのpost_commandでもテケテケ表示できるように
             self.imgcount           = 0         #ダリで作った画像の連番
 
         
@@ -666,7 +666,7 @@ class myopenai :
 
 
         def post_registered_question(self, f_printlog:bool=False, f_stream:bool=False) -> str:
-            self.token_queue_gpts.clear() #念のためトークンをクリアしとく
+            self.token_queue_gpts = queue.QUeue() #念のためトークンをクリアしとく
             self.f_running = False 
 
             print(f"f_stream={f_stream}")
@@ -687,7 +687,7 @@ class myopenai :
 
 
             if self.get_nextcommand() == 'dalle' :
-                self.token_queue_gpts.append("[[next dalle]]")
+                self.token_queue_gpts.put("[[next dalle]]")
 
             if self.currentcmd not in ['dalle']: # dalleは画像生成するので、プロンプトを投げない
                 self.mo.create_message(msg)
@@ -699,16 +699,16 @@ class myopenai :
                         time.sleep(0.1)
                         token = self.mo.get_queue()["text"]
                         if token :
-                            self.token_queue_gpts.append(token)
+                            self.token_queue_gpts.put(token)
                     #最後の残りかすトークン
                     token = self.mo.get_queue()
                     if token :
-                        self.token_queue_gpts.append(token)
-                    self.token_queue_gpts.append('[[end]]') #終了サイン
+                        self.token_queue_gpts.put(token)
+                    self.token_queue_gpts.put('[[end]]') #終了サイン
                 else :
                     response = self.mo.run(f_stream=False)
-                    self.token_queue_gpts.append(response["text"]) #Threading実行されてることもあるし、念のためトークンキューにも入れておく
-                    self.token_queue_gpts.append("[[end]]")
+                    self.token_queue_gpts.put(response["text"]) #Threading実行されてることもあるし、念のためトークンキューにも入れておく
+                    self.token_queue_gpts.put("[[end]]")
 
                 response = self.mo.get_lastmsg()
                 self.log.append({"role": "assistant", "msg":response, "baseqid": self.currstep})
@@ -753,8 +753,8 @@ class myopenai :
                 )
                 response = filename
                 self.imgcount += 1
-                self.token_queue_gpts.append(f"dalle:{filename}, {str(self.imgcount)}") #Threading実行されてるとき用
-                self.token_queue_gpts.append('[[end]]') #これがないとThreading実行の時に無限ループに陥る
+                self.token_queue_gpts.put(f"dalle:{filename}, {str(self.imgcount)}") #Threading実行されてるとき用
+                self.token_queue_gpts.put('[[end]]') #これがないとThreading実行の時に無限ループに陥る
                 self.log.append({"role": "dalle", "msg": filename, "baseqid": self.currstep})
                 self.f_userturn = False
                 self.__set_nextstep(q['nextid'], origmsg) 
@@ -771,8 +771,8 @@ class myopenai :
         #--- テケテケ表示に欠かせない関数(GPTs版) -----------------#
         def get_gpts_queue(self)->deque :
             token = ""
-            if self.token_queue_gpts :
-                token = self.token_queue_gpts.popleft() #[[end]]を切り分けたいので、合体ループは使わない
+            if self.token_queue_gpts.qsize() > 0 :
+                token = self.token_queue_gpts.get() #[[end]]を切り分けたいので、合体ループは使わない
             return token
         
 
