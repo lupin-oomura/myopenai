@@ -157,6 +157,7 @@ class myopenai :
         self.f_running = True
 
         self.handler = self.EventHandler(self.mystreamlit)
+        print(f"print flag is [{f_print}]")
         self.handler.set_printflag(f_print)
 
         if f_stream :
@@ -703,12 +704,12 @@ class myopenai :
                 self.mo.create_message(msg)
                 print(f"gpts --- no={self.currstep}, cmd={self.currentcmd}")
                 if f_stream :
-                    thread = threading.Thread(target=self.mo.run, kwargs={'f_stream':True, 'f_print':False})
+                    thread = threading.Thread(target=self.mo.run, kwargs={'f_stream':True, 'f_print':f_printlog})
                     thread.start()
                     time.sleep(0.1)
                     while self.mo.is_running() :
                         time.sleep(0.1)
-                        token = self.mo.get_queue()["text"]
+                        token = self.mo.get_queue()
                         if token :
                             self.token_queue_gpts.put(token)
                     #最後の残りかすトークン
@@ -802,7 +803,7 @@ class myopenai :
                 if self.is_eoq() :
                     break
                 
-                thread = threading.Thread(target=self.post_registered_question, kwargs={'f_stream':f_stream,})
+                thread = threading.Thread(target=self.post_registered_question, kwargs={'f_stream':f_stream,'f_printlog':True})
                 thread.start()
 
                 res = ""

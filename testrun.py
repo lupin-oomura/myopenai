@@ -96,26 +96,41 @@ mo.gpts.set_questions(f"commanddata2.txt")
 
 
 mo.gpts.set_usermessage("こんにちは")
-while not mo.gpts.is_eoq():
-    while not mo.gpts.is_userturn() :
+while True :
 
-        thread = threading.Thread(target=mo.gpts.post_registered_question, kwargs={'f_stream':False,})
-        thread.start()
-        time.sleep(0.1)
-        token = ""
-        while thread.is_alive() or mo.gpts.token_queue_gpts.qsize() > 0 :
-            time.sleep(0.1)
-            token = mo.gpts.get_gpts_queue()
-            if token :
-                print(f"token: [{token}]")
+    mo.gpts.autochat(True)
+    res = "aaa"
+    while res != "" :
+        res = mo.gpts.get_autochat_response()
+        print(res)
 
-        f = mo.gpts.is_passcase()
-        print(f"is pass = {f}")
-        thread.join()
-
+    if mo.gpts.is_eoq():
+        break
 
     msg = input("msg:")
     mo.gpts.set_usermessage(msg)
+
+
+# while not mo.gpts.is_eoq():
+#     while not mo.gpts.is_userturn() :
+
+#         thread = threading.Thread(target=mo.gpts.post_registered_question, kwargs={'f_stream':False,})
+#         thread.start()
+#         time.sleep(0.1)
+#         token = ""
+#         while thread.is_alive() or mo.gpts.token_queue_gpts.qsize() > 0 :
+#             time.sleep(0.1)
+#             token = mo.gpts.get_gpts_queue()
+#             if token :
+#                 print(f"token: [{token}]")
+
+#         f = mo.gpts.is_passcase()
+#         print(f"is pass = {f}")
+#         thread.join()
+
+
+#     msg = input("msg:")
+#     mo.gpts.set_usermessage(msg)
 
         # log = mo.gpts.get_log()
         # print(log)
