@@ -829,8 +829,8 @@ class myopenai :
                     elif token == "[[next dalle]]" :
                         self.que_msg_autochat.put(token)
                     else :
-                        self.que_msg_autochat.put(f"stream:{token}")
                         res += token
+                        self.que_msg_autochat.put(f"stream:{res}")
 
                 thread.join() #念のためthreadが閉じたことを確認
 
