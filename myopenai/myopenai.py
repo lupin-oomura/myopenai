@@ -820,7 +820,7 @@ class myopenai :
                         if self.is_passcase() == True :
                             res = ""
                         else :
-                            self.que_msg_autochat.put(res)
+                            self.que_msg_autochat.put(f"response:{res}")
                             res = ""
                     elif token[:6] == "dalle:" :
                         #画像生成の時の処理
@@ -829,6 +829,7 @@ class myopenai :
                     elif token == "[[next dalle]]" :
                         self.que_msg_autochat.put(token)
                     else :
+                        self.que_msg_autochat.put(f"stream:{token}")
                         res += token
 
                 thread.join() #念のためthreadが閉じたことを確認
@@ -839,7 +840,8 @@ class myopenai :
                 res = self.que_msg_autochat.get()
             return res
 
-
+        def get_autochat_queuecount(self) -> int :
+            return self.que_msg_autochat.qsize()
 
 
 
