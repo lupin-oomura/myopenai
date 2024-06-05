@@ -544,9 +544,9 @@ class myopenai :
             self.log                = []
             self.currentcmd         = ""        #どのコマンドが直前で流れたかを保持
             self.token_queue_gpts   = queue.Queue()   #gptsのpost_commandでもテケテケ表示できるように
-            self.imgcount           = 0         #ダリで作った画像の連番
-            self.f_goto             = False     #gotoコマンドで変化球になった場合
-
+            self.imgcount           = 0                 #ダリで作った画像の連番
+            self.f_goto             = False             #gotoコマンドで変化球になった場合
+            self.que_msg_autochat   = queue.Queue()     #autochatで使うキュー
         
         def __get_qdata(self, id: int) -> dict:
             return next(item for item in self.qlist if item["id"] == id)
@@ -796,6 +796,47 @@ class myopenai :
             self.log.append({"role": "user", "msg": msg, "baseqid": None})
             self.f_userturn = False
 
+
+        def autochat(self, f_stream:bool=True) :
+            while self.is_userturn() == False :
+                if self.is_eoq() :
+                    break
+                
+                thread = threading.Thread(target=self.post_registered_question, kwargs={'f_stream':f_stream,})
+                thread.start()
+
+                res = ""
+                while True :
+                    fff = thread.is_alive()
+                    nnn = self.token_queue_gpts.qsize() 
+                    if fff == False and nnn == 0 :
+                        break
+
+                    token = self.get_gpts_queue()
+                    if token == "" :
+                        time.sleep(0.1)
+                    elif token == "[[end]]" :
+                        if self.is_passcase() == True :
+                            res = ""
+                        else :
+                            self.que_msg_autochat.put(res)
+                            res = ""
+                    elif token[:6] == "dalle:" :
+                        #画像生成の時の処理
+                        self.que_msg_autochat.put(token)
+                        res = ""
+                    elif token == "[[next dalle]]" :
+                        self.que_msg_autochat.put(token)
+                    else :
+                        res += token
+
+                thread.join() #念のためthreadが閉じたことを確認
+
+        def get_autochat_response(self) -> str :
+            res = ""
+            if self.que_msg_autochat.qsize() > 0 :
+                res = self.que_msg_autochat.get()
+            return res
 
 
 
