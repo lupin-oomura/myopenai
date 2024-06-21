@@ -153,8 +153,10 @@ class myopenai :
         with open(file_name, 'wb') as f:
             f.write(content)
 
-    def run(self, f_stream:bool=True, f_print:bool=True) -> str :
+    def run(self, thread_id=None, f_stream:bool=True, f_print:bool=True) -> str :
         self.f_running = True
+        if thread_id is None :
+            thread_id = self.thread.id
 
         self.handler = self.EventHandler(self.mystreamlit)
         print(f"print flag is [{f_print}]")
@@ -162,7 +164,7 @@ class myopenai :
 
         if f_stream :
             with self.client.beta.threads.runs.stream(
-                thread_id     = self.thread.id,
+                thread_id     = thread_id,
                 assistant_id  = self.assistant.id,
                 event_handler = self.handler,
             ) as stream:
@@ -172,7 +174,7 @@ class myopenai :
 
         else :
             run = self.client.beta.threads.runs.create_and_poll(
-                thread_id    = self.thread.id,
+                thread_id    = thread_id,
                 assistant_id = self.assistant.id,
             )
 
@@ -180,7 +182,7 @@ class myopenai :
                 print(f"error ??? : {run.status}")
 
         self.messages = self.client.beta.threads.messages.list(
-            thread_id = self.thread.id,
+            thread_id = thread_id,
         )
 
         response = self.get_lastmsg()
