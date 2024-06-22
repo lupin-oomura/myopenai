@@ -340,18 +340,16 @@ class myopenai :
 
     def myjson(self, response:str, f_print:bool=False)->dict :
         # JSON形式の文字列をPythonのリストに変換
-        if '```json\n' in response :
-            nakami = response.split('```json\n')[1]
-            nakami = nakami.split('\n```')[0] if '\n```' in nakami else nakami
-                
+        if '```json' in response :
+            pattern = r"```json(.*?)```"                
         elif '```' in response :
-            nakami = response.split('```\n')[1]
-            nakami = nakami.split('\n```')[0] if '\n```' in nakami else nakami
+            pattern = r"```(.*?)```"                
         else :
-            nakami = response
+            return None
 
-        # 余分なカンマを取り除く
-        nakami = re.sub(r',\s*([\]\}])', r'\1', nakami)
+        matches = re.findall(pattern, response, re.DOTALL)
+        nakami = matches[0]
+        nakami = re.sub(r',\s*([\]\}])', r'\1', nakami) # 余分なカンマを取り除く
         try :
             jsondata = json.loads(nakami)
         except json.decoder.JSONDecodeError:
