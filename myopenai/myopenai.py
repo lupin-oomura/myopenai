@@ -162,6 +162,7 @@ class myopenai :
         print(f"print flag is [{f_print}]")
         self.handler.set_printflag(f_print)
 
+        errmsg = None
         if f_stream :
             with self.client.beta.threads.runs.stream(
                 thread_id     = thread_id,
@@ -172,6 +173,14 @@ class myopenai :
             print('\n')
             #最後のキュー取得とかしなきゃいけないので、まだHandlerは閉じない
 
+            #エラーチェック
+            runs = self.client.beta.threads.runs.list(
+                thread_id = thread_id,
+            )
+            errmsg = runs.data[0].last_error
+            if errmsg is not None :
+                errmsg = errmsg.message
+
         else :
             run = self.client.beta.threads.runs.create_and_poll(
                 thread_id    = thread_id,
@@ -179,11 +188,16 @@ class myopenai :
             )
 
             if run.status != 'completed': 
-                print(f"error ??? : {run.status}")
+                errmsg = run.last_error.message
+
+        if errmsg is not None :
+            print(f"error !!! : {errmsg}")
+            return None
 
         self.messages = self.client.beta.threads.messages.list(
             thread_id = thread_id,
         )
+
 
         response = self.get_lastmsg()
         print(f"response = {response}")
@@ -339,6 +353,9 @@ class myopenai :
 
 
     def myjson(self, response:str, f_print:bool=False)->dict :
+        if not response :
+            return None
+        
         # JSON形式の文字列をPythonのリストに変換
         if '```json' in response :
             pattern = r"```json(.*?)```"                
@@ -348,7 +365,7 @@ class myopenai :
             return None
 
         matches = re.findall(pattern, response, re.DOTALL)
-        nakami = matches[0]
+        nakami = matches[-1].strip()
         nakami = re.sub(r',\s*([\]\}])', r'\1', nakami) # 余分なカンマを取り除く
         try :
             jsondata = json.loads(nakami)
@@ -360,6 +377,238 @@ class myopenai :
                 print("----------------------------------")
 
         return jsondata
+
+
+
+
+    #-------------------------------------------------#
+    #--- 議事録要約用のクラス --------------------------#
+    #-------------------------------------------------#
+    class giji_rocker:
+        mo        = None
+        l_minutes = [] #改行区切りで議事録文字起こしデータが入る
+        l_youyaku = [] #要約結果データ
+        l_topic_segments = [] #大量の文字起こしデータをどこで切るかの情報が入っている({開始行id,終了行id,トピックタイトル})
+
+        def __init__(self, mo):
+            self.mo = mo        
+            self.l_minutes = [] 
+            self.l_youyaku = [] 
+            self.l_topic_segments = [] 
+
+        def set_mojiokoshi(self, txt, matomegyou:int=1) :
+            #matomegyou: 2行で1つのデータ（時間と発言とか）の場合、2にする。
+            l_lines = txt.split("\n")
+            self.l_minutes = ['|'.join(l_lines[i:i+matomegyou]) for i in range(0, len(l_lines), matomegyou)]
+            #idを付与する。0スタートの連番
+            self.l_minutes = [f"{i}|{x}" for i, x in enumerate(self.l_minutes)]
+            #デフォルト値をセット（全体を１つに）
+            self.l_topic_segments = [ { "開始行id":0, "終了行id":len(self.l_minutes), "トピックタイトル":"" } ]
+
+        #--- トピック分割 ----------------------#
+        def split_mojiokoshi(self, splitsize:int=18000) :
+            # splitsizeが30000だと、出力込みで制限に引っ掛かることが多いので、余裕をもって18000で分割。（デフォルトは）
+            self.l_topic_segments = self.__get_topics_from_minutes(splitsize=splitsize)
+
+        def get_topic_segments(self) :
+            return self.l_topic_segments
+        def save_topic_segments(self, fn:str) :
+            with open(fn, "w", encoding='utf-8') as f:
+                json.dump(self.l_topic_segments, f, ensure_ascii=False, indent=4)
+        def load_topic_segments(self, fn:str) :
+            with open(fn, "r", encoding='utf-8') as f:
+                self.l_topic_segments = json.load(f)
+                
+        def youyaku_minutes(self) :
+            self.l_youyaku = []
+            for l in self.l_topic_segments :
+                id_from = l["開始行id"]
+                id_to   = l["終了行id"]
+                txt_minutes = '\n'.join(self.l_minutes[id_from:id_to+1])
+                txt_minutes = f"id|talk\n{txt_minutes}"
+
+                res = self.__youyaku_minutes(txt_minutes)
+                res['開始行id'] = id_from
+                res['終了行id'] = id_to
+                self.l_youyaku.append(res)
+            return self.l_youyaku
+
+        def get_youyaku(self) :
+            return self.l_youyaku
+        def save_youyaku(self, fn:str) :
+            with open(fn, "w", encoding='utf-8') as f:
+                json.dump(self.l_youyaku, f, ensure_ascii=False, indent=4)
+        def load_youyaku(self, fn:str) :
+            with open(fn, "r", encoding='utf-8') as f:
+                self.l_youyaku = json.load(f)
+            
+
+        def __get_topics_from_minutes(self, splitsize:int) :
+            """
+            議事録からトピックをまとめ、そのトピックの開始行と終了行を取得する。
+            ループでチェックするので、結構時間がかかる。
+            議事録をsplitsize文字で分割してチェックする。30000文字で10トピックくらい。
+            議事録は、改行で分割されたリスト型。
+            """
+
+            # #↓一番きめ細かいが、ループがかなり多くて出力がかさみ、Token上限に引っ掛かるので、いったんパス
+            # prompt_group1 = '''あなたに会議の文字起こしデータを渡します。
+            # 非常に長い議論であったため、議論の内容ごとにトピック分割したいと思います。
+            # 次のステップに従って文字起こしデータを複数ブロックに分割してください。
+
+            # #Step1: 会話のトピックごとにブロック分割する
+            # 各行の内容を把握し、同一トピックの会話がされている行はまとめてください。この作業を経て、複数のブロック（１つのブロックでは同一トピックで会話されている）を作ってください。
+            # 同じトピックの会話が複数行にまたがっている場合は、そこで切らないように注意してください。
+            # また、最後のブロックが他のブロックに比べて大幅に行数が多くなる傾向にあります。それぞれのブロックの文字数に偏りが出ないように注意してください。
+            # 出力フォーマット: "開始行id":x, "終了行id":y, "トピックタイトル":""
+            # ※「Step1」と出力し、その後出力フォーマットの内容だけを出力してください。出力フォーマットの内容以外は一切不要です。
+
+            # #Step2: ブロックの統合
+            # ブロックの数が10個を超えるようなら、各ブロックごとの内容を理解して内容の近しいブロックを統合してください。
+            # 注意点として、最後のブロックが他のブロックに比べて大幅に行数が多くなる傾向にあります。それぞれのブロックの文字数に偏りが出ないように注意してください。
+            # 出力フォーマット: "開始行id":x, "終了行id":y, "トピックタイトル":""
+            # ※「Step2」と出力し、その後出力フォーマットの内容だけを出力してください。出力フォーマットの内容以外は一切不要です。
+
+            # #Step3: 結果の確認
+            # Step2の結果、ブロックの数が10個を超えるようなら、「Step3の結果：10個を超えているのでStep2に戻ります」と出力し、Step2に戻る。
+            # ブロック数が10個以内になったら、「Step3の結果：OK」と言って、以下の出力フォーマットで結果を出力してください。
+            # 出力フォーマット: json{{ [ {{ "開始行id":x, "終了行id":y, "トピックタイトル":"" }} ] }}
+
+            # 文字起こしデータ: """
+            # {txt_minutes}
+            # """
+            # '''
+
+            #↓簡易版。ループは2回で済む
+            prompt_group1 = '''あなたに会議の文字起こしデータを渡します。
+非常に長い議論であったため、議論の内容ごとにトピック分割したいと思います。
+次のステップに従って文字起こしデータを複数ブロックに分割してください。
+
+#Step1: 会話のトピックごとにブロック分割する
+各行の内容を把握し、同一トピックの会話がされている行はまとめてください。この作業を経て、複数のブロック（１つのブロックでは同一トピックで会話されている）を作ってください。
+同じトピックの会話が複数行にまたがっている場合は、そこで切らないように注意してください。
+また、最後のブロックが他のブロックに比べて大幅に行数が多くなる傾向にあります。それぞれのブロックの文字数に偏りが出ないように注意してください。
+出力フォーマット: "開始行id":x, "終了行id":y, "トピックタイトル":""
+※「Step1」と出力し、その後出力フォーマットの内容だけを出力してください。出力フォーマットの内容以外は一切不要です。
+
+#Step2: ブロックの統合
+ブロックの数が{n_group}個を超えるようなら、各ブロックごとの内容を理解して内容の近しいブロックを統合してください。
+そして、ブロック数が{n_group}個になるまで統合処理を続けてください。
+注意点として、最後のブロックが他のブロックに比べて大幅に行数が多くなる傾向にあります。それぞれのブロックの文字数に偏りが出ないように注意してください。
+
+ブロック数が{n_group}個になったら、「Step2」と出力し、その後以下の出力をしてください。
+出力フォーマットの内容以外は一切不要です。
+
+出力フォーマット: ```json [ {{ "開始行id":x, "終了行id":y, "トピックタイトル":"" }}, ] ```
+
+文字起こしデータ: """
+{txt_minutes}
+"""
+'''
+
+            #30000万文字で分割
+            l_minutes_split = self.__split_list_by_length(self.l_minutes, splitsize)
+
+            #30000文字ごとに、どこで区切るかをGPTに見てもらう
+            l_topic_segments_all = []
+            l_lastgroup = [] #切れ目の調整グループ
+            for n_loop, l in enumerate(l_minutes_split) :
+                l_adjust =l_lastgroup + l
+                txt_minutes = '\n'.join(l_adjust)
+                txt_minutes = f"id|talk\n{txt_minutes}"
+                len_minutes = len(txt_minutes)
+                n_group = int( len_minutes / 30000 * 10 + 0.5) #簡易的な四捨五入
+
+                #GPT照会(スレッドは毎回新しく。そうしないと文字制限くらう)
+                pmt1 = prompt_group1.format(n_group=n_group, txt_minutes=txt_minutes)
+                self.mo.set_systemprompt("")
+                self.mo.create_thread()
+                self.mo.create_message(pmt1)
+                response = None
+                while response is None :
+                    response = self.mo.run()
+                    l_topic_segments = self.mo.myjson(response)
+                    if l_topic_segments is None :
+                        #大体はトークン制限に引っ掛かってる。1分ウェイトを掛ける
+                        print("GPTエラー。おそらくトークン上限。1分まつ")
+                        time.sleep(60)
+
+                #最後のグループは、次のグループに含める
+                if n_loop >= len(l_minutes_split)-1 :
+                    l_topic_segments_all.extend( l_topic_segments )
+                    l_lastgroup = []
+                else :
+                    l_topic_segments_all.extend( l_topic_segments[:-1] )
+                    #最後のグループ調整
+                    id_lastgroup_from = int( l_topic_segments[-1]["開始行id"] )
+                    id_lastgroup_to   = int( l_topic_segments[-1]["終了行id"] )
+                    l_lastgroup = self.l_minutes[id_lastgroup_from:id_lastgroup_to+1]
+
+            return l_topic_segments_all
+
+
+        def __split_list_by_length(self, l_list, max_length):
+            """
+            文字列リストを、リストの文字数で分割する。
+            議事録など膨大なテキストを分割するためのもの。
+            改行でリストを作り、そのリストをこの関数に入れて、3万文字ごとに分割するなどに使う。
+            """
+            result = []
+            current_list = []
+            current_length = 0
+
+            for string in l_list:
+                if current_length + len(string) > max_length:
+                    result.append(current_list)
+                    current_list = []
+                    current_length = 0
+                current_list.append(string)
+                current_length += len(string)
+            
+            if current_list:
+                result.append(current_list)
+            
+            return result
+
+
+        def __youyaku_minutes(self, txt_minutes)->dict :
+            """
+            txt_minutes(議事録データ)を要約する。
+            `id|talk\n0|あいう\n1|えお\n`というフォーマット
+            戻り値は、辞書型
+            """
+
+            prompt_youyaku = '''以下の会議文字起こしについて、どのようなことが議論されたかを要約してください。
+また、タスクや宿題があれば、それも抽出してください。宿題は、あなたの推測で書き出すのではなく、「〇〇します」「〇〇してください」「後で〇〇する」「〇〇をリストアップする」「これは宿題ですね」といった発言がある場合にのみ抽出してください。
+
+出力形式: """
+```json
+{{ 
+    "トピックタイトル":"", 
+    "要約":[
+        {{ "要約内容": "", "発言元id": [] }},
+    ], 
+    "宿題":[ 
+        {{ "宿題内容": "", "宿題に関するポイントやメモ": [], "発言元id": [] }},
+    ] 
+}}
+```
+"""
+
+会議文字起こし: """
+{txt_minutes}
+"""
+'''
+            #GPT照会(スレッドは毎回新しく。そうしないと文字制限くらう)
+            self.mo.set_systemprompt("あなたは、優秀なライターです。会議で議論された主要なトピックと決定事項を要約して、わかりやすいメモを作成することができます。")
+            self.mo.create_thread()
+
+            pmt1 = prompt_youyaku.format(txt_minutes=txt_minutes)
+            self.mo.create_message(pmt1)
+            response = self.mo.run()
+
+            j = self.mo.myjson(response)
+            return j
 
 
     # def getdata_from_vtt(self, vtt_file_path:str) -> list :
@@ -844,6 +1093,16 @@ class myopenai :
             return self.que_msg_autochat.qsize()
 
 
+#-------------------------------------------------#
+#-------------------------------------------------#
+#-------------------------------------------------#
+from dotenv import load_dotenv
+load_dotenv()
+
+# thread_id = mo.get_threadid()
+# print(f"thread_id = {thread_id}")
+
+
 
 # def tanjun() :
 #     mo = myopenai('gpt-3.5-turbo')
@@ -978,16 +1237,45 @@ class myopenai :
 #     print(ans)
 
 
-# def image_generate(mo) :
+# def image_generate() :
+#     mo = myopenai()
 #     image_url = mo.image_generate("a white cat", size="256x256", model='dall-e-2', filename="downloaded_image.png")
 #     print(image_url)
 
-# if __name__ == '__main__' :
-#     mo = myopenai()
-#     image_generate(mo)
-#     # mo.pdf_to_vector(r'C:\temp\Apps\Python\st_toranomaki\【御請求書】テスト.pdf')
-#     # tanjun()
-#     # embedding_ppt()
-#     # embedding_txt()
+if __name__ == '__main__' :
+    # mo.pdf_to_vector(r'C:\temp\Apps\Python\st_toranomaki\【御請求書】テスト.pdf')
+    # tanjun()
+    # embedding_ppt()
+    # embedding_txt()
+    # image_generate()
 
-# # StudioにDockerをあげる時のTips集
+
+    #--- 議事録要約サンプル ----------------------------#
+    def gijiroku_youyaku() :
+        mo = myopenai()
+        giji = mo.giji_rocker(mo)
+
+        #議事録データ読み込み & セット
+        with open(r"C:\Users\shino\downloads\議事録‗NOK‗20240620.txt", "r", encoding="utf-8") as f :
+            txt = f.read()
+        giji.set_mojiokoshi(txt, 2)
+
+        # #文字数が多すぎるので、いくつかのトピックに分割。(処理長い)
+        # giji.split_mojiokoshi()
+        # #いったん保存
+        # giji.save_topic_segments(r'C:\Users\shino\downloads\l_topic_segments.json')
+
+        # トピック分割データ読み込み
+        giji.load_topic_segments(r'C:\Users\shino\downloads\l_topic_segments.json')
+
+        giji.youyaku_minutes()
+        giji.save_youyaku(r'C:\Users\shino\downloads\res_youyaku.json')
+        giji.load_youyaku(r'C:\Users\shino\downloads\res_youyaku.json')
+        l_youyaku = giji.get_youyaku()
+
+
+    gijiroku_youyaku() #議事録要約
+
+# StudioにDockerをあげる時のTips集
+
+
