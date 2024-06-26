@@ -405,6 +405,9 @@ class myopenai :
             #デフォルト値をセット（全体を１つに）
             self.l_topic_segments = [ { "開始行id":0, "終了行id":len(self.l_minutes), "トピックタイトル":"" } ]
 
+        def get_minutes(self) :
+            return self.l_minutes
+        
         #--- トピック分割 ----------------------#
         def split_mojiokoshi(self, splitsize:int=18000) :
             # splitsizeが30000だと、出力込みで制限に引っ掛かることが多いので、余裕をもって18000で分割。（デフォルトは）
@@ -421,13 +424,14 @@ class myopenai :
                 
         def youyaku_minutes(self) :
             self.l_youyaku = []
-            for l in self.l_topic_segments :
+            for i, l in enumerate(self.l_topic_segments) :
                 id_from = l["開始行id"]
                 id_to   = l["終了行id"]
                 txt_minutes = '\n'.join(self.l_minutes[id_from:id_to+1])
                 txt_minutes = f"id|talk\n{txt_minutes}"
 
-                res = self.__youyaku_minutes(txt_minutes)
+                kobetsu_msg = f"[processing: {i}/{len(self.l_topic_segments)}]"
+                res = self.__youyaku_minutes(txt_minutes, kobetsu_msg)
                 res['開始行id'] = id_from
                 res['終了行id'] = id_to
                 self.l_youyaku.append(res)
@@ -571,12 +575,10 @@ class myopenai :
             return result
 
 
-        def __youyaku_minutes(self, txt_minutes)->dict :
-            """
-            txt_minutes(議事録データ)を要約する。
-            `id|talk\n0|あいう\n1|えお\n`というフォーマット
-            戻り値は、辞書型
-            """
+        def __youyaku_minutes(self, txt_minutes, kobetsu_msg:str=None)->dict :
+            # txt_minutes(議事録データ)を要約する。
+            # `id|talk\n0|あいう\n1|えお\n`というフォーマット
+            # 戻り値は、辞書型
 
             prompt_youyaku = '''以下の会議文字起こしについて、どのようなことが議論されたかを要約してください。
 また、タスクや宿題があれば、それも抽出してください。宿題は、あなたの推測で書き出すのではなく、「〇〇します」「〇〇してください」「後で〇〇する」「〇〇をリストアップする」「これは宿題ですね」といった発言がある場合にのみ抽出してください。
@@ -599,6 +601,9 @@ class myopenai :
 {txt_minutes}
 """
 '''
+            if kobetsu_msg is not None :
+                prompt_youyaku = f"まず最初に、`{kobetsu_msg}`と言ってください。その後、次の処理を行ってください。\n{prompt_youyaku}"
+
             #GPT照会(スレッドは毎回新しく。そうしないと文字制限くらう)
             self.mo.set_systemprompt("あなたは、優秀なライターです。会議で議論された主要なトピックと決定事項を要約して、わかりやすいメモを作成することができます。")
             self.mo.create_thread()
