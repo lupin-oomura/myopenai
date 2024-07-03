@@ -531,11 +531,19 @@ class myopenai :
                 response = None
                 while response is None :
                     response = self.mo.run()
-                    l_topic_segments = self.mo.myjson(response)
-                    if l_topic_segments is None :
-                        #大体はトークン制限に引っ掛かってる。1分ウェイトを掛ける
+                    if response == None :
                         print("GPTエラー。おそらくトークン上限。1分まつ")
                         time.sleep(60)
+                    else :
+                        l_topic_segments = self.mo.myjson(response)
+                        if l_topic_segments is None :
+                            #大体はトークン制限に引っ掛かってる。1分ウェイトを掛ける
+                            print("JSONがNone。再実行。")
+                            time.sleep(1)
+                            self.mo.set_systemprompt("")
+                            self.mo.create_thread()
+                            self.mo.create_message(pmt1)
+                            response = None
 
                 #最後のグループは、次のグループに含める
                 if n_loop >= len(l_minutes_split)-1 :
