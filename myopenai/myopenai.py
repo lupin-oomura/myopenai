@@ -810,7 +810,13 @@ class myopenai :
             self.imgcount           = 0                 #ダリで作った画像の連番
             self.f_goto             = False             #gotoコマンドで変化球になった場合
             self.que_msg_autochat   = queue.Queue()     #autochatで使うキュー
-        
+            self.system_prompt      = ""
+
+        def initialize(self) :
+            self.mo.set_systemprompt(self.system_prompt)
+            self.mo.create_thread()
+            
+
         def __get_qdata(self, id: int) -> dict:
             return next(item for item in self.qlist if item["id"] == id)
 
@@ -911,9 +917,12 @@ class myopenai :
                 for s in l_txt:
                     l = s.split('----------')
                     if len(l) == 3:
-                        qlist.append({"id": int(l[0]), "type": l[2].strip(), "q": l[1].strip()})
+                        if l[2] == "system" :
+                            self.system_prompt = l[1].strip()
+                        else :
+                            qlist.append({"id": int(l[0]), "type": l[2].strip(), "q": l[1].strip()})
                     else:
-                        print("スクリプトファイルがおかしいかも？")
+                        print(f"スクリプトファイルがおかしいかも？\n{l}")
                         exit(0)
 
             qlist = [
