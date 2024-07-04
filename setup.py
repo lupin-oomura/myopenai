@@ -2,12 +2,13 @@ from setuptools import setup, find_packages
 
 setup(
     name='myopenai',
-    version='0.7.3',
+    version='0.7.5',
     packages=find_packages(),
     install_requires=[
         'openai',
         'python-dotenv',
         'requests',
+        'httpx',
     ],
     url='https://github.com/lupin-oomura/myopenai.git',
     author='Shin Oomura',

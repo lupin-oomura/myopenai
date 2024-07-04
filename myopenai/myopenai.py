@@ -10,6 +10,7 @@ from collections import deque
 import requests #画像downloadで使用
 import threading
 import time
+import httpx
 
 #ハンドラー用
 from typing_extensions import override
@@ -265,17 +266,22 @@ class myopenai :
         # size(dalle2): 256x256, 512x512, 1024x1024 e2とe3で指定できるサイズが違うので注意！
         # model: dall-e-3, dall-e-2
 
-        response = self.client.images.generate(
-            model  = model,
-            prompt = pmt,
-            size   = size,
-            quality="standard",
-            n      = n, #dalle2のみ指定できるみたい
-        )
-        image_url = response.data[0].url
+        image_url = None
+        try:
+            response = self.client.images.generate(
+                model  = model,
+                prompt = pmt,
+                size   = size,
+                quality="standard",
+                n      = n, #dalle2のみ指定できるみたい
+            )
+            image_url = response.data[0].url
+            if filename is not None :
+                self.download_image(image_url, filename)
 
-        if filename is not None :
-            self.download_image(image_url, filename)
+        except Exception as e:
+            error_detail = e.response.json()
+            print(f"error in image_generate: {e.response.status_code} - {error_detail['error']['message']}")
 
         return image_url
 
@@ -815,7 +821,7 @@ class myopenai :
         def initialize(self) :
             self.mo.set_systemprompt(self.system_prompt)
             self.mo.create_thread()
-            
+
 
         def __get_qdata(self, id: int) -> dict:
             return next(item for item in self.qlist if item["id"] == id)
@@ -832,7 +838,12 @@ class myopenai :
                 targetresult = [x["msg"] for x in self.log if x["role"] == 'assistant' and x["baseqid"] == int(qid)]
                 
                 jsondata = self.mo.myjson(targetresult[-1])  # -1=最新の結果
-                msg = re.sub(pattern, jsondata[itemname], q)  # {}部分を置換
+                jsondata = jsondata[itemname]
+                if isinstance(jsondata, dict) :
+                    str_data = '\n'.json([ f"{key}: {value}" for key, value in jsondata.items() ])
+                else :
+                    str_data = jsondata
+                msg = re.sub(pattern, str_data, q)  # {}部分を置換
 
 
             else:
@@ -916,6 +927,7 @@ class myopenai :
                 l_txt = [part.strip() for part in f.read().split("==========") if part.strip()]
                 for s in l_txt:
                     l = s.split('----------')
+                    l = [x.strip() for x in l]
                     if len(l) == 3:
                         if l[2] == "system" :
                             self.system_prompt = l[1].strip()
@@ -1032,17 +1044,23 @@ class myopenai :
                 model, size = self.__get_dalle_option(origmsg)
                 if f_printlog :
                     print(f"model=[{model}], size=[{size}], filename=[{filename}], msg=[{msg}]")
-                self.mo.image_generate(
+
+                res_dalle = self.mo.image_generate(
                     msg,
                     size=size,
                     model=model,
                     filename=filename,
                 )
-                response = filename
-                self.imgcount += 1
-                self.token_queue_gpts.put(f"dalle:{filename}, {str(self.imgcount)}") #Threading実行されてるとき用
+                if res_dalle is None :
+                    print("Dalle Error!")
+                    response = "DALLE ERROR!!"
+                else :
+                    self.imgcount += 1
+                    response = filename
+
+                self.token_queue_gpts.put(f"dalle:{response}, {str(self.imgcount)}") #Threading実行されてるとき用
                 self.token_queue_gpts.put('[[end]]') #これがないとThreading実行の時に無限ループに陥る
-                self.log.append({"role": "dalle", "msg": filename, "baseqid": self.currstep})
+                self.log.append({"role": "dalle", "msg": response, "baseqid": self.currstep})
                 self.f_userturn = False
                 self.__set_nextstep(q['nextid'], origmsg) 
             else:
