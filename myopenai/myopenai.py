@@ -840,7 +840,7 @@ class myopenai :
                 jsondata = self.mo.myjson(targetresult[-1])  # -1=最新の結果
                 jsondata = jsondata[itemname]
                 if isinstance(jsondata, dict) :
-                    str_data = '\n'.json([ f"{key}: {value}" for key, value in jsondata.items() ])
+                    str_data = '\n'.join([ f"{key}: {value}" for key, value in jsondata.items() ])
                 else :
                     str_data = jsondata
                 msg = re.sub(pattern, str_data, q)  # {}部分を置換
