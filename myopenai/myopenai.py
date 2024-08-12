@@ -10,7 +10,6 @@ from collections import deque
 import requests #画像downloadで使用
 import threading
 import time
-import httpx
 
 #ハンドラー用
 from typing_extensions import override
@@ -405,6 +404,7 @@ class myopenai :
         def set_mojiokoshi(self, txt, matomegyou:int=1) :
             #matomegyou: 2行で1つのデータ（時間と発言とか）の場合、2にする。
             l_lines = txt.split("\n")
+            l_lines = [x for x in l_lines if x.strip()] #空白行を除去
             self.l_minutes = ['|'.join(l_lines[i:i+matomegyou]) for i in range(0, len(l_lines), matomegyou)]
             #idを付与する。0スタートの連番
             self.l_minutes = [f"{i}|{x}" for i, x in enumerate(self.l_minutes)]
@@ -497,12 +497,14 @@ class myopenai :
 #Step1: 会話のトピックごとにブロック分割する
 各行の内容を把握し、同一トピックの会話がされている行はまとめてください。この作業を経て、複数のブロック（１つのブロックでは同一トピックで会話されている）を作ってください。
 同じトピックの会話が複数行にまたがっている場合は、そこで切らないように注意してください。
-また、最後のブロックが他のブロックに比べて大幅に行数が多くなる傾向にあります。それぞれのブロックの文字数に偏りが出ないように注意してください。
+また、最後のブロックの行数が他のブロックに比べて大幅に多くなる傾向にあります。それぞれのブロックの文字数に偏りが出ないように注意してください。
 出力フォーマット: "開始行id":x, "終了行id":y, "トピックタイトル":""
 ※「Step1」と出力し、その後出力フォーマットの内容だけを出力してください。出力フォーマットの内容以外は一切不要です。
 
 #Step2: ブロックの統合
-ブロックの数が{n_group}個を超えるようなら、各ブロックごとの内容を理解して内容の近しいブロックを統合してください。
+ブロックの数が{n_group}個を超えるようなら、次のような処理でブロックを統合してください。
+・挨拶パートなど、議論として重要でないブロックは、前後のブロックに統合
+・各ブロックごとの内容を理解して内容の近しいブロックを統合
 そして、ブロック数が{n_group}個になるまで統合処理を続けてください。
 注意点として、最後のブロックが他のブロックに比べて大幅に行数が多くなる傾向にあります。それぞれのブロックの文字数に偏りが出ないように注意してください。
 
@@ -528,6 +530,7 @@ class myopenai :
                 txt_minutes = f"id|talk\n{txt_minutes}"
                 len_minutes = len(txt_minutes)
                 n_group = int( len_minutes / 30000 * 10 + 0.5) #簡易的な四捨五入
+                n_group = 5 if n_group < 5 else n_group #議事録文字数が3000以内なら0になるので、最低5にセット
 
                 #GPT照会(スレッドは毎回新しく。そうしないと文字制限くらう)
                 pmt1 = prompt_group1.format(n_group=n_group, txt_minutes=txt_minutes)
