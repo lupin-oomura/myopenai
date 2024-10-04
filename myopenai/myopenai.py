@@ -17,6 +17,7 @@ from openai import AssistantEventHandler
 
 import queue
 
+import webvtt
 
 class myopenai :
     #------------------------------------------------------------#
@@ -59,20 +60,6 @@ class myopenai :
         def set_printflag(self, f_print) :
             self.f_print = f_print 
 
-        #--- メモ: OpenAIのAPI情報に乗ってたが、この関数を使わなくてもストリーミング表示できたので、一旦コメントアウト
-        # def on_tool_call_created(self, tool_call):
-        #     print(f"\nassistant > {tool_call.type}\n", flush=True)
-
-        # def on_tool_call_delta(self, delta, snapshot):
-        #     if delta.type == 'code_interpreter':
-        #         if delta.code_interpreter.input:
-        #             print(delta.code_interpreter.input, end="", flush=True)
-        #         if delta.code_interpreter.outputs:
-        #             print(f"\n\noutput >", flush=True)
-        #             for output in delta.code_interpreter.outputs:
-        #                 if output.type == "logs":
-        #                     print(f"\n{output.logs}", flush=True)
-
 
     #----------------------------------------------#
     #--- 本体 -------------------------------------#
@@ -87,6 +74,7 @@ class myopenai :
     f_running    = False    #Run処理が回っている場合Trueになる
     handler      = None     #Runが回っている間、EventHandlerが入る
     msgs         = []    #self.messagesから重要な要素だけ抜き出したローカルメッセージーズ
+    prompts_for_so = []     #StructuredOutputは、Agenetが使えないから、自力でプロンプトを積み上げる。
 
     def __init__(self, myst=None, model:str="gpt-4o", systemmessage:str="") :
         self.unique_id = str(uuid.uuid4())
@@ -94,6 +82,7 @@ class myopenai :
         self.f_running = False
         self.mystreamlit = myst
         self.msgs        = []
+        self.prompts_for_so = []
 
         self.assistant = self.client.beta.assistants.create(
             # name="感謝と半生",
@@ -138,6 +127,9 @@ class myopenai :
             token += self.handler.token_queue.get()
         return token
     
+    def get_queue_size(self)->int :
+        return self.handler.token_queue.qsize() 
+    
     # def set_queue(self, txt:str) :
     #     self.token_queue.append(txt)
 
@@ -153,6 +145,29 @@ class myopenai :
         with open(file_name, 'wb') as f:
             f.write(content)
 
+    def create_message_so(self, role, prompt) :
+        self.prompts_for_so.append({"role":role, "content":prompt})
+    def delete_all_message(self) :
+        self.prompts_for_so = []
+    def run_so(self, model, ResponseStep) :
+        try:
+            response = self.client.beta.chat.completions.parse(
+                model=model,
+                temperature=0,
+                messages=self.prompts_for_so,
+                response_format=ResponseStep,
+            )
+            return response.choices[0].message.parsed
+        except OpenAIError as e:
+            if "Could not parse response content as the length limit was reached" in str(e) :
+                print(f"OpenAIエラー：文字数制限（{e}）")
+            else :
+                print(f"OpenAIエラー：{e}")
+            return None
+        except Exception as e:
+            print(f"予期せぬエラー：{e}")
+            return None
+        
     def run(self, thread_id=None, f_stream:bool=True, f_print:bool=True) -> str :
         self.f_running = True
         if thread_id is None :
@@ -394,12 +409,14 @@ class myopenai :
         l_minutes = [] #改行区切りで議事録文字起こしデータが入る
         l_youyaku = [] #要約結果データ
         l_topic_segments = [] #大量の文字起こしデータをどこで切るかの情報が入っている({開始行id,終了行id,トピックタイトル})
+        giji_youshi = None #議事要旨が入る
 
         def __init__(self, mo):
             self.mo = mo        
             self.l_minutes = [] 
             self.l_youyaku = [] 
             self.l_topic_segments = [] 
+            self.giji_youshi = None
 
         def set_mojiokoshi(self, txt, matomegyou:int=1) :
             #matomegyou: 2行で1つのデータ（時間と発言とか）の場合、2にする。
@@ -410,6 +427,14 @@ class myopenai :
             self.l_minutes = [f"{i}|{x}" for i, x in enumerate(self.l_minutes)]
             #デフォルト値をセット（全体を１つに）
             self.l_topic_segments = [ { "開始行id":0, "終了行id":len(self.l_minutes), "トピックタイトル":"" } ]
+
+
+        def set_mojiokoshi_from_vttfile(self, filename) :
+            self.l_minutes = []
+            for caption in webvtt.read(filename):
+                self.l_minutes.append(f"{caption.start}|({caption.voice}){caption.text}") #id(caption.identifier)は、連番にする
+            self.l_minutes = [f"{i}|{self.l_minutes[i]}" for i in range(len(self.l_minutes))] #連番のIDを振る
+            self.l_topic_segments = [ { "開始行id":0, "終了行id":len(self.l_minutes), "トピックタイトル":"" } ] #デフォルト値
 
         def get_minutes(self) :
             return self.l_minutes
@@ -442,6 +467,41 @@ class myopenai :
                 res['終了行id'] = id_to
                 self.l_youyaku.append(res)
             return self.l_youyaku
+
+        def get_gijiyoushi(self) -> str :
+            return self.giji_youshi
+        
+        def generate_gijiyoushi(self) -> str :
+            yyy = ""
+            for m in self.l_youyaku:
+                yy = '\n'.join( [f' ・{x["要約内容"]}' for x in m["要約"]] )
+                yy = f'{m["トピックタイトル"]}\n{yy}\n\n'
+                yyy += yy
+
+            prompt = f'''
+                会議を要約した結果をもとに、この会議の議事要旨をまとめて、一文でまとめてください。
+                例：「この会議では、○○○。」
+                出力フォーマット: ```json{{議事要旨}}```
+                で出力してください。その出力以外は出さないでください。
+
+                会議要約内容: """
+                {yyy}
+                """
+            '''
+
+            self.mo.set_systemprompt("あなたは、優秀なライターです。会議で議論された主要なトピックと決定事項を要約して、わかりやすいメモを作成することができます。")
+            self.mo.create_thread()
+            self.mo.create_message(prompt)
+            response = self.mo.run()
+            j = self.mo.myjson(response)
+            self.giji_youshi = j["議事要旨"]
+            return j
+
+
+
+
+
+
 
         def get_youyaku(self) :
             return self.l_youyaku
@@ -491,32 +551,32 @@ class myopenai :
 
             #↓簡易版。ループは2回で済む
             prompt_group1 = '''あなたに会議の文字起こしデータを渡します。
-非常に長い議論であったため、議論の内容ごとにトピック分割したいと思います。
-次のステップに従って文字起こしデータを複数ブロックに分割してください。
+            非常に長い議論であったため、議論の内容ごとにトピック分割したいと思います。
+            次のステップに従って文字起こしデータを複数ブロックに分割してください。
 
-#Step1: 会話のトピックごとにブロック分割する
-各行の内容を把握し、同一トピックの会話がされている行はまとめてください。この作業を経て、複数のブロック（１つのブロックでは同一トピックで会話されている）を作ってください。
-同じトピックの会話が複数行にまたがっている場合は、そこで切らないように注意してください。
-また、最後のブロックの行数が他のブロックに比べて大幅に多くなる傾向にあります。それぞれのブロックの文字数に偏りが出ないように注意してください。
-出力フォーマット: "開始行id":x, "終了行id":y, "トピックタイトル":""
-※「Step1」と出力し、その後出力フォーマットの内容だけを出力してください。出力フォーマットの内容以外は一切不要です。
+            #Step1: 会話のトピックごとにブロック分割する
+            各行の内容を把握し、同一トピックの会話がされている行はまとめてください。この作業を経て、複数のブロック（１つのブロックでは同一トピックで会話されている）を作ってください。
+            同じトピックの会話が複数行にまたがっている場合は、そこで切らないように注意してください。
+            また、最後のブロックの行数が他のブロックに比べて大幅に多くなる傾向にあります。それぞれのブロックの文字数に偏りが出ないように注意してください。
+            出力フォーマット: "開始行id":x, "終了行id":y, "トピックタイトル":""
+            ※「Step1」と出力し、その後出力フォーマットの内容だけを出力してください。出力フォーマットの内容以外は一切不要です。
 
-#Step2: ブロックの統合
-ブロックの数が{n_group}個を超えるようなら、次のような処理でブロックを統合してください。
-・挨拶パートなど、議論として重要でないブロックは、前後のブロックに統合
-・各ブロックごとの内容を理解して内容の近しいブロックを統合
-そして、ブロック数が{n_group}個になるまで統合処理を続けてください。
-注意点として、最後のブロックが他のブロックに比べて大幅に行数が多くなる傾向にあります。それぞれのブロックの文字数に偏りが出ないように注意してください。
+            #Step2: ブロックの統合
+            ブロックの数が{n_group}個を超えるようなら、次のような処理でブロックを統合してください。
+            ・挨拶パートなど、議論として重要でないブロックは、前後のブロックに統合
+            ・各ブロックごとの内容を理解して内容の近しいブロックを統合
+            そして、ブロック数が{n_group}個になるまで統合処理を続けてください。
+            注意点として、最後のブロックが他のブロックに比べて大幅に行数が多くなる傾向にあります。それぞれのブロックの文字数に偏りが出ないように注意してください。
 
-ブロック数が{n_group}個になったら、「Step2」と出力し、その後以下の出力をしてください。
-出力フォーマットの内容以外は一切不要です。
+            ブロック数が{n_group}個になったら、「Step2」と出力し、その後以下の出力をしてください。
+            出力フォーマットの内容以外は一切不要です。
 
-出力フォーマット: ```json [ {{ "開始行id":x, "終了行id":y, "トピックタイトル":"" }}, ] ```
+            出力フォーマット: ```json [ {{ "開始行id":x, "終了行id":y, "トピックタイトル":"" }}, ] ```
 
-文字起こしデータ: """
-{txt_minutes}
-"""
-'''
+            文字起こしデータ: """
+            {txt_minutes}
+            """
+            '''
 
             #30000万文字で分割
             l_minutes_split = self.__split_list_by_length(self.l_minutes, splitsize)
@@ -598,26 +658,26 @@ class myopenai :
             # 戻り値は、辞書型
 
             prompt_youyaku = '''以下の会議文字起こしについて、どのようなことが議論されたかを要約してください。
-また、タスクや宿題があれば、それも抽出してください。宿題は、あなたの推測で書き出すのではなく、「〇〇します」「〇〇してください」「後で〇〇する」「〇〇をリストアップする」「これは宿題ですね」といった発言がある場合にのみ抽出してください。
+            また、タスクや宿題があれば、それも抽出してください。宿題は、あなたの推測で書き出すのではなく、「〇〇します」「〇〇してください」「後で〇〇する」「〇〇をリストアップする」「これは宿題ですね」といった発言がある場合にのみ抽出してください。
 
-出力形式: """
-```json
-{{ 
-    "トピックタイトル":"", 
-    "要約":[
-        {{ "要約内容": "", "発言元id": [] }},
-    ], 
-    "宿題":[ 
-        {{ "宿題内容": "", "宿題に関するポイントやメモ": [], "発言元id": [] }},
-    ] 
-}}
-```
-"""
+            出力形式: """
+            ```json
+            {{ 
+                "トピックタイトル":"", 
+                "要約":[
+                    {{ "要約内容": "", "発言元id": [] }},
+                ], 
+                "宿題":[ 
+                    {{ "宿題内容": "", "宿題に関するポイントやメモ": [], "発言元id": [] }},
+                ] 
+            }}
+            ```
+            """
 
-会議文字起こし: """
-{txt_minutes}
-"""
-'''
+            会議文字起こし: """
+            {txt_minutes}
+            """
+            '''
             if kobetsu_msg is not None :
                 prompt_youyaku = f"まず最初に、`{kobetsu_msg}`と言ってください。その後、次の処理を行ってください。\n{prompt_youyaku}"
 
@@ -633,84 +693,6 @@ class myopenai :
             return j
 
 
-    # def getdata_from_vtt(self, vtt_file_path:str) -> list :
-
-    #     def parse_vtt_line(line):
-    #         # 正規表現パターンで発話者と発話内容を抽出
-    #         pattern = r"<v ([^>]+)>([^<]+)</v>"
-    #         match = re.search(pattern, line)
-    #         if match:
-    #             speaker = match.group(1).strip()
-    #             message = match.group(2).strip()
-    #             return speaker, message
-    #         return None, None
-
-    #     def parse_time_range(time_range):
-    #         # 時間範囲から開始と終了の時刻文字列を抽出
-    #         start_time_str, end_time_str = time_range.split(' --> ')
-            
-    #         # 時間フォーマットの指定
-    #         time_format = "%H:%M:%S.%f"
-            
-    #         # 文字列からdatetimeオブジェクトへの変換
-    #         base_date = datetime.datetime(1900, 1, 1)  # ダミーの日付
-    #         start_time = datetime.datetime.strptime(start_time_str, time_format) - base_date
-    #         end_time = datetime.datetime.strptime(end_time_str, time_format) - base_date
-            
-    #         return start_time, end_time
-
-
-
-    #     # VTTデータを格納するためのリスト
-    #     cues = []
-
-    #     with open(vtt_file_path, 'r', encoding='utf-8') as file:
-    #         lines = file.readlines()
-
-    #         # WEBVTTヘッダーをスキップする
-    #         lines = iter(lines[1:])  # ヘッダー以降の行に対してイテレータを作成
-    #         while True:
-    #             try:
-    #                 line = next(lines).strip()
-    #                 if line and not line.startswith("NOTE") and not line.startswith("STYLE"):
-    #                     # キューのIDを抽出
-    #                     if '-->' in line : #キューIDがないケースもある（いきなりタイムスタンプ）
-    #                         cue_id = ''
-    #                         timestamp = line.strip()
-    #                     else :
-    #                         cue_id = line
-    #                         # タイムスタンプを抽出
-    #                         timestamp = next(lines).strip()
-
-    #                     start_time, end_time = parse_time_range(timestamp)
-
-    #                     # テキストを抽出（複数行にわたることがあるため、空行が現れるまで読み込む）
-    #                     text_lines = []
-    #                     line = next(lines, '').strip()
-    #                     while line:
-    #                         text_lines.append(line)
-    #                         line = next(lines, '').strip()  # ファイルの終わりに達してもエラーを出さないように修正
-    #                     text = ' '.join(text_lines)
-
-    #                     #textに発話者と発話内容が入っているので<v></v>、正規表現で切り分ける
-    #                     speaker, message = parse_vtt_line(text)
-    #                     speaker = re.sub(r'\[.*?\]', '', speaker).strip() #speakerに[]が入っている場合、それを除去
-
-                        
-    #                     # 抽出したデータを辞書としてリストに追加
-    #                     cues.append({
-    #                         'id': cue_id,
-    #                         'timestamp': timestamp,
-    #                         'time_start': start_time,
-    #                         'time_end': end_time,
-    #                         'text': text,
-    #                         'speaker': speaker,
-    #                         'message': message
-    #                     })
-    #             except StopIteration:
-    #                 break  # ファイルの終わりに達したらループを抜ける
-
-    #     return cues
 
     # def youyaku_minutes(self, logfile:str, minutesfile:str, promptfile:str, model:str, streaming:bool=False) : 
     #     dic_vtt = self.getdata_from_vtt(minutesfile)
