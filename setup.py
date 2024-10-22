@@ -8,7 +8,6 @@ setup(
         'openai',
         'python-dotenv',
         'requests',
-        'webvtt-py',
     ],
     url='https://github.com/lupin-oomura/myopenai.git',
     author='Shin Oomura',
