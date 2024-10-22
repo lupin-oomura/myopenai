@@ -6,3 +6,5 @@ __myfunc
 *.mp3
 *.png
 commanddata.txt
+*.wav
+*.m4a
