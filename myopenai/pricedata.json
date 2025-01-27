@@ -1,0 +1,499 @@
+{
+  "gpt-4o-2024-08-06": {
+    "text_tokens": {
+      "input_tokens": 2.5,
+      "cached_input_tokens": 1.25,
+      "output_tokens": 10.0,
+      "currency": "USD",
+      "unit": "per million tokens",
+      "description": "Text tokens price"
+    },
+    "fine_tuning": {
+      "training_tokens": 25.0,
+      "input_tokens": 3.75,
+      "cached_input_tokens": 1.875,
+      "output_tokens": 15.0,
+      "currency": "USD",
+      "unit": "per million tokens",
+      "description": "Fine tuning price"
+    }
+  },
+  "gpt-4o-2024-11-20": {
+    "text_tokens": {
+      "input_tokens": 2.5,
+      "cached_input_tokens": 1.25,
+      "output_tokens": 10.0,
+      "currency": "USD",
+      "unit": "per million tokens",
+      "description": "Text tokens price"
+    }
+  },
+  "gpt-4o-2024-05-13": {
+    "text_tokens": {
+      "input_tokens": 5.0,
+      "cached_input_tokens": null,
+      "output_tokens": 15.0,
+      "currency": "USD",
+      "unit": "per million tokens",
+      "description": "Text tokens price"
+    }
+  },
+  "gpt-4o-audio-preview-2024-12-17": {
+    "text_tokens": {
+      "input_tokens": 2.5,
+      "cached_input_tokens": null,
+      "output_tokens": 10.0,
+      "currency": "USD",
+      "unit": "per million tokens",
+      "description": "Text tokens price"
+    },
+    "audio_tokens": {
+      "input_tokens": 40.0,
+      "cached_input_tokens": null,
+      "output_tokens": 80.0,
+      "currency": "USD",
+      "unit": "per million tokens",
+      "description": "Audio tokens price"
+    }
+  },
+  "gpt-4o-audio-preview-2024-10-01": {
+    "text_tokens": {
+      "input_tokens": 2.5,
+      "cached_input_tokens": null,
+      "output_tokens": 10.0,
+      "currency": "USD",
+      "unit": "per million tokens",
+      "description": "Text tokens price"
+    },
+    "audio_tokens": {
+      "input_tokens": 100.0,
+      "cached_input_tokens": null,
+      "output_tokens": 200.0,
+      "currency": "USD",
+      "unit": "per million tokens",
+      "description": "Audio tokens price"
+    }
+  },
+  "gpt-4o-realtime-preview-2024-12-17": {
+    "text_tokens": {
+      "input_tokens": 5.0,
+      "cached_input_tokens": 2.5,
+      "output_tokens": 20.0,
+      "currency": "USD",
+      "unit": "per million tokens",
+      "description": "Text tokens price"
+    },
+    "audio_tokens": {
+      "input_tokens": 40.0,
+      "cached_input_tokens": 2.5,
+      "output_tokens": 80.0,
+      "currency": "USD",
+      "unit": "per million tokens",
+      "description": "Audio tokens price"
+    }
+  },
+  "gpt-4o-realtime-preview-2024-10-01": {
+    "text_tokens": {
+      "input_tokens": 5.0,
+      "cached_input_tokens": 2.5,
+      "output_tokens": 20.0,
+      "currency": "USD",
+      "unit": "per million tokens",
+      "description": "Text tokens price"
+    },
+    "audio_tokens": {
+      "input_tokens": 100.0,
+      "cached_input_tokens": 20.0,
+      "output_tokens": 200.0,
+      "currency": "USD",
+      "unit": "per million tokens",
+      "description": "Audio tokens price"
+    }
+  },
+  "gpt-4o-mini-2024-07-18": {
+    "text_tokens": {
+      "input_tokens": 0.15,
+      "cached_input_tokens": 0.075,
+      "output_tokens": 0.6,
+      "currency": "USD",
+      "unit": "per million tokens",
+      "description": "Text tokens price"
+    },
+    "fine_tuning": {
+      "training_tokens": 3.0,
+      "input_tokens": 0.3,
+      "cached_input_tokens": 0.15,
+      "output_tokens": 1.2,
+      "currency": "USD",
+      "unit": "per million tokens",
+      "description": "Fine tuning price"
+    }
+  },
+  "gpt-4o-mini-audio-preview-2024-12-17": {
+    "text_tokens": {
+      "input_tokens": 0.15,
+      "cached_input_tokens": null,
+      "output_tokens": 0.6,
+      "currency": "USD",
+      "unit": "per million tokens",
+      "description": "Text tokens price"
+    },
+    "audio_tokens": {
+      "input_tokens": 10.0,
+      "cached_input_tokens": null,
+      "output_tokens": 20.0,
+      "currency": "USD",
+      "unit": "per million tokens",
+      "description": "Audio tokens price"
+    }
+  },
+  "gpt-4o-mini-realtime-preview-2024-12-17": {
+    "text_tokens": {
+      "input_tokens": 0.6,
+      "cached_input_tokens": 0.3,
+      "output_tokens": 2.4,
+      "currency": "USD",
+      "unit": "per million tokens",
+      "description": "Text tokens price"
+    },
+    "audio_tokens": {
+      "input_tokens": 10.0,
+      "cached_input_tokens": 0.3,
+      "output_tokens": 20.0,
+      "currency": "USD",
+      "unit": "per million tokens",
+      "description": "Audio tokens price"
+    }
+  },
+  "o1-2024-12-17": {
+    "text_tokens": {
+      "input_tokens": 15.0,
+      "cached_input_tokens": 7.5,
+      "output_tokens": 60.0,
+      "currency": "USD",
+      "unit": "per million tokens",
+      "description": "Text tokens price"
+    }
+  },
+  "o1-preview-2024-09-12": {
+    "text_tokens": {
+      "input_tokens": 15.0,
+      "cached_input_tokens": 7.5,
+      "output_tokens": 60.0,
+      "currency": "USD",
+      "unit": "per million tokens",
+      "description": "Text tokens price"
+    }
+  },
+  "o1-mini-2024-09-12": {
+    "text_tokens": {
+      "input_tokens": 3.0,
+      "cached_input_tokens": 1.5,
+      "output_tokens": 12.0,
+      "currency": "USD",
+      "unit": "per million tokens",
+      "description": "Text tokens price"
+    }
+  },
+  "gpt-3.5-turbo": {
+    "fine_tuning": {
+      "training_tokens": 8.0,
+      "input_tokens": 3.0,
+      "cached_input_tokens": null,
+      "output_tokens": 6.0,
+      "currency": "USD",
+      "unit": "per million tokens",
+      "description": "Fine tuning price"
+    }
+  },
+  "davinci-002": {
+    "text_tokens": {
+      "input_tokens": 2.0,
+      "cached_input_tokens": null,
+      "output_tokens": 2.0,
+      "currency": "USD",
+      "unit": "per million tokens",
+      "description": "Other models (text tokens)"
+    },
+    "fine_tuning": {
+      "training_tokens": 6.0,
+      "input_tokens": 12.0,
+      "cached_input_tokens": null,
+      "output_tokens": 12.0,
+      "currency": "USD",
+      "unit": "per million tokens",
+      "description": "Fine tuning price"
+    }
+  },
+  "babbage-002": {
+    "text_tokens": {
+      "input_tokens": 0.4,
+      "cached_input_tokens": null,
+      "output_tokens": 0.4,
+      "currency": "USD",
+      "unit": "per million tokens",
+      "description": "Other models (text tokens)"
+    },
+    "fine_tuning": {
+      "training_tokens": 0.4,
+      "input_tokens": 1.6,
+      "cached_input_tokens": null,
+      "output_tokens": 1.6,
+      "currency": "USD",
+      "unit": "per million tokens",
+      "description": "Fine tuning price"
+    }
+  },
+  "chatgpt-4o-latest": {
+    "text_tokens": {
+      "input_tokens": 5.0,
+      "cached_input_tokens": null,
+      "output_tokens": 15.0,
+      "currency": "USD",
+      "unit": "per million tokens",
+      "description": "Other models (text tokens)"
+    }
+  },
+  "gpt-4-turbo-2024-04-09": {
+    "text_tokens": {
+      "input_tokens": 10.0,
+      "cached_input_tokens": null,
+      "output_tokens": 30.0,
+      "currency": "USD",
+      "unit": "per million tokens",
+      "description": "Other models (text tokens)"
+    }
+  },
+  "gpt-4-0125-preview": {
+    "text_tokens": {
+      "input_tokens": 10.0,
+      "cached_input_tokens": null,
+      "output_tokens": 30.0,
+      "currency": "USD",
+      "unit": "per million tokens",
+      "description": "Other models (text tokens)"
+    }
+  },
+  "gpt-4-1106-preview": {
+    "text_tokens": {
+      "input_tokens": 10.0,
+      "cached_input_tokens": null,
+      "output_tokens": 30.0,
+      "currency": "USD",
+      "unit": "per million tokens",
+      "description": "Other models (text tokens)"
+    }
+  },
+  "gpt-4-1106-vision-preview": {
+    "text_tokens": {
+      "input_tokens": 10.0,
+      "cached_input_tokens": null,
+      "output_tokens": 30.0,
+      "currency": "USD",
+      "unit": "per million tokens",
+      "description": "Other models (text tokens)"
+    }
+  },
+  "gpt-4-0613": {
+    "text_tokens": {
+      "input_tokens": 30.0,
+      "cached_input_tokens": null,
+      "output_tokens": 60.0,
+      "currency": "USD",
+      "unit": "per million tokens",
+      "description": "Other models (text tokens)"
+    }
+  },
+  "gpt-4-0314": {
+    "text_tokens": {
+      "input_tokens": 30.0,
+      "cached_input_tokens": null,
+      "output_tokens": 60.0,
+      "currency": "USD",
+      "unit": "per million tokens",
+      "description": "Other models (text tokens)"
+    }
+  },
+  "gpt-4-32k": {
+    "text_tokens": {
+      "input_tokens": 60.0,
+      "cached_input_tokens": null,
+      "output_tokens": 120.0,
+      "currency": "USD",
+      "unit": "per million tokens",
+      "description": "Other models (text tokens)"
+    }
+  },
+  "gpt-3.5-turbo-0125": {
+    "text_tokens": {
+      "input_tokens": 0.5,
+      "cached_input_tokens": null,
+      "output_tokens": 1.5,
+      "currency": "USD",
+      "unit": "per million tokens",
+      "description": "Other models (text tokens)"
+    }
+  },
+  "gpt-3.5-turbo-1106": {
+    "text_tokens": {
+      "input_tokens": 1.0,
+      "cached_input_tokens": null,
+      "output_tokens": 2.0,
+      "currency": "USD",
+      "unit": "per million tokens",
+      "description": "Other models (text tokens)"
+    }
+  },
+  "gpt-3.5-turbo-0613": {
+    "text_tokens": {
+      "input_tokens": 1.5,
+      "cached_input_tokens": null,
+      "output_tokens": 2.0,
+      "currency": "USD",
+      "unit": "per million tokens",
+      "description": "Other models (text tokens)"
+    }
+  },
+  "gpt-3.5-0301": {
+    "text_tokens": {
+      "input_tokens": 1.5,
+      "cached_input_tokens": null,
+      "output_tokens": 2.0,
+      "currency": "USD",
+      "unit": "per million tokens",
+      "description": "Other models (text tokens)"
+    }
+  },
+  "gpt-3.5-turbo-instruct": {
+    "text_tokens": {
+      "input_tokens": 1.5,
+      "cached_input_tokens": null,
+      "output_tokens": 2.0,
+      "currency": "USD",
+      "unit": "per million tokens",
+      "description": "Other models (text tokens)"
+    }
+  },
+  "gpt-3.5-turbo-16k-0613": {
+    "text_tokens": {
+      "input_tokens": 3.0,
+      "cached_input_tokens": null,
+      "output_tokens": 4.0,
+      "currency": "USD",
+      "unit": "per million tokens",
+      "description": "Other models (text tokens)"
+    }
+  },
+
+  "text-embedding-3-small": {
+    "embeddings": {
+      "cost_per_input_tokens": 0.02,
+      "currency": "USD",
+      "unit": "per million tokens",
+      "description": "Embeddings price"
+    }
+  },
+  "text-embedding-3-large": {
+    "embeddings": {
+      "cost_per_input_tokens": 0.13,
+      "currency": "USD",
+      "unit": "per million tokens",
+      "description": "Embeddings price"
+    }
+  },
+  "text-embedding-ada-002": {
+    "embeddings": {
+      "cost_per_input_tokens": 0.1,
+      "currency": "USD",
+      "unit": "per million tokens",
+      "description": "Embeddings price"
+    }
+  },
+
+  "omni-moderation-latest": {
+    "moderation": {
+      "cost": 0.0,
+      "currency": "USD",
+      "unit": "per million tokens",
+      "description": "Free moderation"
+    }
+  },
+  "omni-moderation-2024-09-26": {
+    "moderation": {
+      "cost": 0.0,
+      "currency": "USD",
+      "unit": "per million tokens",
+      "description": "Free moderation"
+    }
+  },
+  "text-moderation-latest": {
+    "moderation": {
+      "cost": 0.0,
+      "currency": "USD",
+      "unit": "per million tokens",
+      "description": "Free moderation"
+    }
+  },
+  "text-moderation-007": {
+    "moderation": {
+      "cost": 0.0,
+      "currency": "USD",
+      "unit": "per million tokens",
+      "description": "Free moderation"
+    }
+  },
+
+  "whisper-1": {
+    "transcription": {
+      "cost_per_minute": 0.006,
+      "currency": "USD",
+      "unit": "per minute",
+      "description": "Transcription"
+    }
+  },
+  "tts-1": {
+    "speech_generation": {
+      "cost_per_1m_characters": 15.0,
+      "currency": "USD",
+      "unit": "per 1M characters",
+      "description": "Text-to-Speech"
+    }
+  },
+  "tts-1-hd": {
+    "speech_generation": {
+      "cost_per_1m_characters": 30.0,
+      "currency": "USD",
+      "unit": "per 1M characters",
+      "description": "Text-to-Speech HD"
+    }
+  },
+
+  "dall-e-3-standard": {
+    "image_generation": {
+      "price_1024x1024": 0.04,
+      "price_1024x1792": 0.08,
+      "currency": "USD",
+      "unit": "per image",
+      "description": "DALL·E 3 Standard"
+    }
+  },
+  "dall-e-3-hd": {
+    "image_generation": {
+      "price_1024x1024": 0.08,
+      "price_1024x1792": 0.12,
+      "currency": "USD",
+      "unit": "per image",
+      "description": "DALL·E 3 HD"
+    }
+  },
+  "dall-e-2": {
+    "image_generation": {
+      "price_256x256": 0.016,
+      "price_512x512": 0.018,
+      "price_1024x1024": 0.02,
+      "currency": "USD",
+      "unit": "per image",
+      "description": "DALL·E 2"
+    }
+  }
+}

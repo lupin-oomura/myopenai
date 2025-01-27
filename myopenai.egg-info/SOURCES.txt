@@ -1,0 +1,9 @@
+README.md
+setup.py
+myopenai/__init__.py
+myopenai/myopenai.py
+myopenai.egg-info/PKG-INFO
+myopenai.egg-info/SOURCES.txt
+myopenai.egg-info/dependency_links.txt
+myopenai.egg-info/requires.txt
+myopenai.egg-info/top_level.txt
