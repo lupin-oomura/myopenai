@@ -495,5 +495,33 @@
       "unit": "per image",
       "description": "DALL·E 2"
     }
+  },
+
+
+
+
+
+
+  "claude-3-5-sonnet-20241022": {
+    "text_tokens": {
+      "input_tokens": 3,
+      "cached_input_tokens": 3,
+      "output_tokens": 15.0,
+      "currency": "USD",
+      "unit": "per million tokens",
+      "description": "Text tokens price"
+    }
+  },
+  "gemini-1.5-pro-002": {
+    "text_tokens": {
+      "input_tokens": 1.25,
+      "cached_input_tokens": 0.3125,
+      "output_tokens": 5.00,
+      "currency": "USD",
+      "unit": "per million tokens",
+      "description": "Text tokens price"
+    }
   }
+
+
 }

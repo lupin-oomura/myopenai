@@ -8,3 +8,6 @@ __myfunc
 commanddata.txt
 *.wav
 *.m4a
+dist/
+build/
+myopenai.egg-info/

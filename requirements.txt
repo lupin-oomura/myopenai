@@ -1,3 +1,7 @@
 openai
+google-generativeai
+anthropic
 python-dotenv
 requests
+jsonschema
+pydantic

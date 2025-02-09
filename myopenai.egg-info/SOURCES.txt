@@ -2,6 +2,7 @@ README.md
 setup.py
 myopenai/__init__.py
 myopenai/myopenai.py
+myopenai/pricedata.json
 myopenai.egg-info/PKG-INFO
 myopenai.egg-info/SOURCES.txt
 myopenai.egg-info/dependency_links.txt

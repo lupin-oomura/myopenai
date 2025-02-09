@@ -11,6 +11,15 @@ import json
 from pydantic import BaseModel, Field
 from typing import List
 
+import anthropic
+from jsonschema import validate, ValidationError
+import google.generativeai as gemini
+
+#whisper用
+from io import BytesIO
+import wave
+import pyaudio
+
 
 class myopenai :
 
@@ -23,15 +32,23 @@ class myopenai :
         self.queue_response_text = queue.Queue()
         self.f_running = True
         self.messages = []
+        self.messages_claude = []
+        self.messages_gemini = []
         self.l_cost = []
         if model :
             self.default_model = model
+        else :
+            self.default_model = "gpt-4o-mini"
+
+        gemini.configure(api_key=os.getenv("GEMINI_API_KEY"))
 
         # pricedata.jsonを読み込む
         current_dir = os.path.dirname(os.path.abspath(__file__))
         with open(os.path.join(current_dir, 'pricedata.json'), 'r') as f:
             self.d_pricedata = json.load(f)
 
+    def use_claude(self, api_key:str) :
+        self.client_claude = anthropic.Anthropic(api_key=api_key)
     def is_running(self) :
         return self.f_running
     def is_running_or_queue(self) :
@@ -41,11 +58,43 @@ class myopenai :
     def is_queue_empty(self) :
         return self.queue_response_text.empty()
 
-    def get_messages(self) :
-        return self.messages
+    def get_messages(self, f_replace_imagedata:bool=False) :
+        messages = self.messages
+        if f_replace_imagedata :
+            #イメージデータがバカほど文字列食うので、置換
+            def replace_image_url(data):
+                if isinstance(data, dict):
+                    for key, value in data.items():
+                        if key == "image_url":
+                            data[key] = "（画像データ）"
+                        else:
+                            # 辞書の値も再帰的に処理する
+                            replace_image_url(value)
+                elif isinstance(data, list):
+                    for item in data:
+                        replace_image_url(item)
+
+            replace_image_url(messages) 
+        return messages
+    
+    def get_messages_claude(self) :
+        return self.messages_claude
+    def get_messages_gemini(self) :
+        return self.messages_gemini
+
+    def delete_last_message(self) :
+        if len(self.messages) == 0 :
+            return None
+        last_message = self.messages[-1]
+        self.messages        = self.messages[:-1]
+        self.messages_claude = self.messages_claude[:-1]
+        self.messages_gemini = self.messages_gemini[:-1]
+        return last_message
 
     def delete_all_messages(self) :
         self.messages = []
+        self.messages_claude = []
+        self.messages_gemini = []
 
     def get_text_from_message(self, msg:dict=None) :
         if not msg :
@@ -68,12 +117,37 @@ class myopenai :
             data = {"role": role, "audio":{"id": msg}}
 
         self.messages.append(data)
+        self.messages_claude.append(data)
+
+        # Google Geminiの場合
+        parts = [{"text": msg}]
+        self.messages_gemini.append({"role": role, "parts": parts})
 
 
+    def add_message_with_image(self, prompt:str, file_path:str, role:str="user") :
+        img_bytes = open(file_path, "rb").read()
+        img_base64 = base64.b64encode(img_bytes).decode('utf-8')
+        content = [{"type": "text", "text": prompt}]
+        content.append({
+            "type": "image_url", 
+            "image_url": {"url": f"data:image/jpeg;base64,{img_base64}"},
+            # "myopenai_image_path": file_path #これ付けたらエラーになる
+        })
+        self.messages.append({"role": role, "content": content})
 
+        # Anthropicでは、image_urlではなく、imageで指定する
+        content = [{"type": "text", "text": prompt}]
+        content.append({
+            "type": "image", 
+            "source": {"type": "base64", "media_type": "image/jpeg", "data": img_base64}
+        })
+        self.messages_claude.append({"role": role, "content": content})
 
+        # Google Geminiの場合
+        parts = [{"text": prompt}]
+        parts.append({"inline_data": {"mime_type": "image/jpeg", "data": img_bytes}})
 
-
+        self.messages_gemini.append({"role": role, "parts": parts})
 
 
     def add_audiodata(self, audiodata, format, text:str=None, role:str="user") :
@@ -88,12 +162,11 @@ class myopenai :
         if text :
             content.append({"type": "text", "text": text})
 
-        self.messages.append(
-            {
-                "role": role,
-                "content": content
-            }
-        )
+        j = {"role": role, "content": content}
+        self.messages.append(j)
+        self.messages_claude.append(j) #とりあえず。たぶんこれではだめ
+        self.messages_gemini.append(j) #とりあえず。たぶんこれではだめ
+
     def add_audio_fromfile(self, file_path, role:str="user") :
         audio_data = open(file_path, "rb").read()
         ext = os.path.splitext(file_path)[1].replace(".","")
@@ -133,13 +206,18 @@ class myopenai :
         self.f_running = True
         if not model :
             model = self.default_model
+    
+        try :
+            response = self.client.beta.chat.completions.parse(
+                model           = model,
+                # temperature     = 0,
+                messages        = self.messages,
+                response_format = ResponseStep,
+            )
+        except Exception as e:
+            print(e)
+            pass #リトライすることがあるが、勝手にリトライするので、スルー（これがないとClientにエラー信号が行く）
 
-        response = self.client.beta.chat.completions.parse(
-            model           = model,
-            # temperature     = 0,
-            messages        = self.messages,
-            response_format = ResponseStep,
-        )
         self.add_message(response.choices[0].message.content, "assistant")
         self.f_running = False
 
@@ -154,6 +232,116 @@ class myopenai :
         self.f_running = False
         return response.choices[0].message.parsed
 
+    def run_so_claude(self, ResponseStep, model:str="claude-3-5-sonnet-20241022") :
+        self.f_running = True
+
+        def resolve_refs(schema, defs=None):
+            # JSON Schema内の$refを手動で解決し、純粋な辞書を返します。
+            if defs is None:
+                defs = schema.get('$defs', {})
+            
+            if isinstance(schema, dict):
+                if '$ref' in schema:
+                    ref = schema['$ref']
+                    if ref.startswith('#/$defs/'):
+                        def_name = ref.replace('#/$defs/', '')
+                        if def_name in defs:
+                            return resolve_refs(defs[def_name], defs)
+                        else:
+                            raise ValueError(f"Reference {ref} not found in $defs.")
+                    else:
+                        raise ValueError(f"Unsupported reference format: {ref}")
+                else:
+                    return {k: resolve_refs(v, defs) for k, v in schema.items()}
+            elif isinstance(schema, list):
+                return [resolve_refs(item, defs) for item in schema]
+            else:
+                return schema
+
+        json_schema_full = ResponseStep.model_json_schema()
+        json_schema_dereferenced = resolve_refs(json_schema_full)
+        json_schema = {
+            "type": json_schema_dereferenced.get("type"),
+            "properties": json_schema_dereferenced.get("properties"),
+            "required": json_schema_dereferenced.get("required"),
+        }
+
+        # ツールの定義
+        json_output_tool = {
+            "name": "json-output",
+            "input_schema": json_schema,
+            "description": "出力をJSON形式のオブジェクトで返します。"
+        }
+
+        # Claudeへのリクエストを作成
+        try:
+            response = self.client_claude.messages.create(
+                model=model,
+                max_tokens=1024,
+                messages=self.messages_claude,
+                temperature=0,  # 一貫した応答を得るために0に設定
+                tools=[json_output_tool],  # ツールを指定
+                tool_choice={
+                    "type": "tool",
+                    "name": "json-output",
+                },
+            )
+        except Exception as e:
+            pass #リトライすることがあるが、勝手にリトライするので、スルー（これがないとClientにエラー信号が行く）
+
+
+        # レスポンスの処理
+        content_blocks = response.content
+        for block in content_blocks:
+            if hasattr(block, 'type') and block.type == "tool_use":
+                # JSON Schemaに従ってバリデーション
+                json_data = block.input
+                validate(instance=json_data, schema=json_schema)
+                # print(f"構造化データ:\n{json.dumps(json_data, ensure_ascii=False, indent=2)}")
+            else:
+                print(block.text)
+
+        self.add_message(json.dumps(json_data, ensure_ascii=False, indent=4), "assistant")
+        self.f_running = False
+
+        self.l_cost.append({
+            "model"               : response.model,
+            "tokens_input"        : response.usage.input_tokens,
+            "tokens_input_cached" : 0,
+            "tokens_input_audio"  : 0,
+            "tokens_output"       : response.usage.output_tokens,
+            "tokens_output_audio" : 0
+        })
+        self.f_running = False
+        return json_data
+
+
+    def run_so_gemini(self, ResponseStep, model:str="gemini-1.5-pro") :
+        self.f_running = True
+
+        model = gemini.GenerativeModel(model_name=model)
+        try :
+            response = model.generate_content(
+                self.messages_gemini,
+                generation_config=gemini.GenerationConfig(
+                    response_mime_type="application/json", response_schema=ResponseStep
+                ),
+            )
+        except Exception as e:
+            pass #リトライすることがあるが、勝手にリトライするので、スルー（これがないとClientにエラー信号が行く）
+        self.add_message(response.text, "assistant")
+        self.f_running = False
+
+        self.l_cost.append({
+            "model"               : response.model_version, #gemini-1.5-pro-002
+            "tokens_input"        : response.usage_metadata.prompt_token_count,
+            "tokens_input_cached" : 0,
+            "tokens_input_audio"  : 0,
+            "tokens_output"       : response.usage_metadata.candidates_token_count,
+            "tokens_output_audio" : 0
+        })
+        self.f_running = False
+        return json.loads(response.text)
 
     def run_to_audio(self, model:str=None) :
         self.f_running = True
@@ -289,6 +477,34 @@ class myopenai :
     def speech_to_text_from_file(self, file_path, model:str="whisper-1", lang:str='ja'):
         audio_data = open(file_path, "rb")
         return self.speech_to_text(audio_data, model, lang)
+    
+    def speech_to_text_pcm(self, audio_data, model:str="whisper-1", lang:str='ja', prompt:str=None):
+        audio_buffer = BytesIO()
+        p = pyaudio.PyAudio()
+        try:
+            with wave.open(audio_buffer, "wb") as wf:
+                wf.setnchannels(1)
+                wf.setsampwidth(p.get_sample_size(pyaudio.paInt16))
+                wf.setframerate(24000)
+                wf.writeframes(audio_data)
+        finally:
+            p.terminate()
+
+        audio_buffer.seek(0)
+
+        d_whisper_result = self.speech_to_text( 
+            ("audio.wav", audio_buffer, "audio/wav"), 
+            model=model,
+            lang=lang,
+            prompt=prompt
+        )
+
+        return d_whisper_result
+
+
+
+
+
 
     def text_to_speech(self, text:str, file_path:str, voice:str="alloy", model:str='tts-1') -> str :
         """
@@ -318,7 +534,12 @@ class myopenai :
         self.f_running = False
 
     def get_cost_all(self) :
-        return sum([self.get_cost(item) for item in self.l_cost])
+        total_cost = 0
+        for item in self.l_cost :
+            cost = self.get_cost(item)
+            item["cost"] = cost
+            total_cost += cost
+        return {"totalcost": total_cost, "l_cost": self.l_cost}
 
     def get_cost(self, item:dict=None) :
         d_pricedata = self.d_pricedata
@@ -337,33 +558,69 @@ class myopenai :
             cost = d_pricedata[k]["image_generation"][f"price_{v['size']}"]
         else :
             pricedata = d_pricedata[k]
-            tokens_input_text_cached = v["tokens_input_cached"] if "tokens_input_cached" in v and v["tokens_input_cached"] is not None else 0
-            tokens_input_audio = v["tokens_input_audio"] if "tokens_input_audio" in v and v["tokens_input_audio"] is not None else 0
-            tokens_input_text = v["tokens_input"] if "tokens_input" in v and v["tokens_input"] is not None else 0
-            tokens_input_text = tokens_input_text - tokens_input_audio - tokens_input_text_cached
-
+            #テキストトークン（入力）
+            tokens_input_text_cached  = v["tokens_input_cached"] if "tokens_input_cached" in v and v["tokens_input_cached"] is not None else 0
+            tokens_input_text         = v["tokens_input"] if "tokens_input" in v and v["tokens_input"] is not None else 0   - tokens_input_text_cached
+            #音声トークン（入力）
+            tokens_input_audio_cached = v["tokens_input_audio_cached"] if "tokens_input_audio_cached" in v and v["tokens_input_audio_cached"] is not None else 0
+            tokens_input_audio        = v["tokens_input_audio"] if "tokens_input_audio" in v and v["tokens_input_audio"] is not None else 0  - tokens_input_audio_cached
+            #テキストトークン（出力）
             tokens_output_text_cached = v["tokens_output_cached"] if "tokens_output_cached" in v and v["tokens_output_cached"] is not None else 0
+            tokens_output_text        = v["tokens_output"       ] if "tokens_output"        in v and v["tokens_output"       ] is not None else 0  - tokens_output_text_cached
+            #音声トークン（出力）
             tokens_output_audio       = v["tokens_output_audio" ] if "tokens_output_audio"  in v and v["tokens_output_audio" ] is not None else 0
-            tokens_output_text        = v["tokens_output"       ] if "tokens_output"        in v and v["tokens_output"       ] is not None else 0
-            tokens_output_text        = tokens_output_text - tokens_output_audio - tokens_output_text_cached
 
-
+            #ユニットコスト
             unitcost_input_text   = (pricedata["text_tokens" ]["input_tokens" ] if "text_tokens"  in pricedata and "input_tokens"  in pricedata["text_tokens" ] else 0) / 1000000
+            unitcost_input_cached = (
+                pricedata["text_tokens"]["cached_input_tokens"]
+                if "text_tokens" in pricedata and "cached_input_tokens" in pricedata["text_tokens"] and pricedata["text_tokens"]["cached_input_tokens"] is not None
+                else 0
+            ) / 1000000
+            
             unitcost_input_audio  = (pricedata["audio_tokens"]["input_tokens" ] if "audio_tokens" in pricedata and "input_tokens"  in pricedata["audio_tokens"] else 0) / 1000000
-            unitcost_input_cached = (pricedata["text_tokens" ]["cached_input_tokens"] if "text_tokens"  in pricedata and "cached_input_tokens" in pricedata["text_tokens" ] and pricedata["text_tokens" ]["cached_input_tokens"] is not None else 0) / 1000000
+            unitcost_input_audio_cached = (
+                pricedata["audio_tokens"]["cached_input_tokens"] 
+                if "audio_tokens" in pricedata and "cached_input_tokens" in pricedata["audio_tokens"] and pricedata["audio_tokens"]["cached_input_tokens"] is not None 
+                else 0
+            ) / 1000000
 
             unitcost_output_text  = (pricedata["text_tokens" ]["output_tokens"] if "text_tokens"  in pricedata and "output_tokens" in pricedata["text_tokens" ] else 0) / 1000000
+            unitcost_output_cached = (
+                pricedata["text_tokens" ]["cached_output_tokens"] 
+                if "text_tokens"  in pricedata and "cached_output_tokens" in pricedata["text_tokens" ] and pricedata["text_tokens" ]["cached_output_tokens"] is not None 
+                else 0
+            ) / 1000000
             unitcost_output_audio = (pricedata["audio_tokens"]["output_tokens"] if "audio_tokens" in pricedata and "output_tokens" in pricedata["audio_tokens"] else 0) / 1000000
-            unitcost_output_cached = (pricedata["text_tokens" ]["cached_output_tokens"] if "text_tokens"  in pricedata and "cached_output_tokens" in pricedata["text_tokens" ] and pricedata["text_tokens" ]["cached_output_tokens"] is not None else 0) / 1000000
 
-            cost_input = unitcost_input_text * tokens_input_text + unitcost_input_audio * tokens_input_audio + unitcost_input_cached * tokens_input_text_cached
-            cost_output = unitcost_output_text * tokens_output_text + unitcost_output_audio * tokens_output_audio + unitcost_output_cached * tokens_output_text_cached
+            cost_input = sum([
+                unitcost_input_text         * tokens_input_text,
+                unitcost_input_cached       * tokens_input_text_cached,
+                unitcost_input_audio        * tokens_input_audio,
+                unitcost_input_audio_cached * tokens_input_audio_cached
+             ])
+            cost_output = sum([
+                unitcost_output_text   * tokens_output_text,
+                unitcost_output_cached * tokens_output_text_cached,
+                unitcost_output_audio  * tokens_output_audio
+            ])
             cost = cost_input + cost_output
 
         return cost
 
 
 
+    def save_messages(self, file_path:str) :
+        messages = {"openai": self.messages, "claude": self.messages_claude, "gemini": self.messages_gemini}
+        with open(file_path, "w", encoding="utf-8") as f:
+            json.dump(messages, f, ensure_ascii=False, indent=4)
+
+    def load_messages(self, file_path:str) :
+        with open(file_path, "r", encoding="utf-8") as f:
+            messages = json.load(f)
+        self.messages = messages["openai"]
+        self.messages_claude = messages["claude"]
+        self.messages_gemini = messages["gemini"]
 
 
 if __name__ == "__main__" :
