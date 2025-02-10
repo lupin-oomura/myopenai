@@ -15,6 +15,11 @@ import anthropic
 from jsonschema import validate, ValidationError
 import google.generativeai as gemini
 
+#whisper用
+from io import BytesIO
+import wave
+import pyaudio
+
 
 class myopenai :
 
@@ -210,6 +215,7 @@ class myopenai :
                 response_format = ResponseStep,
             )
         except Exception as e:
+            print(e)
             pass #リトライすることがあるが、勝手にリトライするので、スルー（これがないとClientにエラー信号が行く）
 
         self.add_message(response.choices[0].message.content, "assistant")
@@ -471,6 +477,34 @@ class myopenai :
     def speech_to_text_from_file(self, file_path, model:str="whisper-1", lang:str='ja'):
         audio_data = open(file_path, "rb")
         return self.speech_to_text(audio_data, model, lang)
+    
+    def speech_to_text_pcm(self, audio_data, model:str="whisper-1", lang:str='ja', prompt:str=None):
+        audio_buffer = BytesIO()
+        p = pyaudio.PyAudio()
+        try:
+            with wave.open(audio_buffer, "wb") as wf:
+                wf.setnchannels(1)
+                wf.setsampwidth(p.get_sample_size(pyaudio.paInt16))
+                wf.setframerate(24000)
+                wf.writeframes(audio_data)
+        finally:
+            p.terminate()
+
+        audio_buffer.seek(0)
+
+        d_whisper_result = self.speech_to_text( 
+            ("audio.wav", audio_buffer, "audio/wav"), 
+            model=model,
+            lang=lang,
+            prompt=prompt
+        )
+
+        return d_whisper_result
+
+
+
+
+
 
     def text_to_speech(self, text:str, file_path:str, voice:str="alloy", model:str='tts-1') -> str :
         """
@@ -524,27 +558,52 @@ class myopenai :
             cost = d_pricedata[k]["image_generation"][f"price_{v['size']}"]
         else :
             pricedata = d_pricedata[k]
-            tokens_input_text_cached = v["tokens_input_cached"] if "tokens_input_cached" in v and v["tokens_input_cached"] is not None else 0
-            tokens_input_audio = v["tokens_input_audio"] if "tokens_input_audio" in v and v["tokens_input_audio"] is not None else 0
-            tokens_input_text = v["tokens_input"] if "tokens_input" in v and v["tokens_input"] is not None else 0
-            tokens_input_text = tokens_input_text - tokens_input_audio - tokens_input_text_cached
-
+            #テキストトークン（入力）
+            tokens_input_text_cached  = v["tokens_input_cached"] if "tokens_input_cached" in v and v["tokens_input_cached"] is not None else 0
+            tokens_input_text         = v["tokens_input"] if "tokens_input" in v and v["tokens_input"] is not None else 0   - tokens_input_text_cached
+            #音声トークン（入力）
+            tokens_input_audio_cached = v["tokens_input_audio_cached"] if "tokens_input_audio_cached" in v and v["tokens_input_audio_cached"] is not None else 0
+            tokens_input_audio        = v["tokens_input_audio"] if "tokens_input_audio" in v and v["tokens_input_audio"] is not None else 0  - tokens_input_audio_cached
+            #テキストトークン（出力）
             tokens_output_text_cached = v["tokens_output_cached"] if "tokens_output_cached" in v and v["tokens_output_cached"] is not None else 0
+            tokens_output_text        = v["tokens_output"       ] if "tokens_output"        in v and v["tokens_output"       ] is not None else 0  - tokens_output_text_cached
+            #音声トークン（出力）
             tokens_output_audio       = v["tokens_output_audio" ] if "tokens_output_audio"  in v and v["tokens_output_audio" ] is not None else 0
-            tokens_output_text        = v["tokens_output"       ] if "tokens_output"        in v and v["tokens_output"       ] is not None else 0
-            tokens_output_text        = tokens_output_text - tokens_output_audio - tokens_output_text_cached
 
-
+            #ユニットコスト
             unitcost_input_text   = (pricedata["text_tokens" ]["input_tokens" ] if "text_tokens"  in pricedata and "input_tokens"  in pricedata["text_tokens" ] else 0) / 1000000
+            unitcost_input_cached = (
+                pricedata["text_tokens"]["cached_input_tokens"]
+                if "text_tokens" in pricedata and "cached_input_tokens" in pricedata["text_tokens"] and pricedata["text_tokens"]["cached_input_tokens"] is not None
+                else 0
+            ) / 1000000
+            
             unitcost_input_audio  = (pricedata["audio_tokens"]["input_tokens" ] if "audio_tokens" in pricedata and "input_tokens"  in pricedata["audio_tokens"] else 0) / 1000000
-            unitcost_input_cached = (pricedata["text_tokens" ]["cached_input_tokens"] if "text_tokens"  in pricedata and "cached_input_tokens" in pricedata["text_tokens" ] and pricedata["text_tokens" ]["cached_input_tokens"] is not None else 0) / 1000000
+            unitcost_input_audio_cached = (
+                pricedata["audio_tokens"]["cached_input_tokens"] 
+                if "audio_tokens" in pricedata and "cached_input_tokens" in pricedata["audio_tokens"] and pricedata["audio_tokens"]["cached_input_tokens"] is not None 
+                else 0
+            ) / 1000000
 
             unitcost_output_text  = (pricedata["text_tokens" ]["output_tokens"] if "text_tokens"  in pricedata and "output_tokens" in pricedata["text_tokens" ] else 0) / 1000000
+            unitcost_output_cached = (
+                pricedata["text_tokens" ]["cached_output_tokens"] 
+                if "text_tokens"  in pricedata and "cached_output_tokens" in pricedata["text_tokens" ] and pricedata["text_tokens" ]["cached_output_tokens"] is not None 
+                else 0
+            ) / 1000000
             unitcost_output_audio = (pricedata["audio_tokens"]["output_tokens"] if "audio_tokens" in pricedata and "output_tokens" in pricedata["audio_tokens"] else 0) / 1000000
-            unitcost_output_cached = (pricedata["text_tokens" ]["cached_output_tokens"] if "text_tokens"  in pricedata and "cached_output_tokens" in pricedata["text_tokens" ] and pricedata["text_tokens" ]["cached_output_tokens"] is not None else 0) / 1000000
 
-            cost_input = unitcost_input_text * tokens_input_text + unitcost_input_audio * tokens_input_audio + unitcost_input_cached * tokens_input_text_cached
-            cost_output = unitcost_output_text * tokens_output_text + unitcost_output_audio * tokens_output_audio + unitcost_output_cached * tokens_output_text_cached
+            cost_input = sum([
+                unitcost_input_text         * tokens_input_text,
+                unitcost_input_cached       * tokens_input_text_cached,
+                unitcost_input_audio        * tokens_input_audio,
+                unitcost_input_audio_cached * tokens_input_audio_cached
+             ])
+            cost_output = sum([
+                unitcost_output_text   * tokens_output_text,
+                unitcost_output_cached * tokens_output_text_cached,
+                unitcost_output_audio  * tokens_output_audio
+            ])
             cost = cost_input + cost_output
 
         return cost

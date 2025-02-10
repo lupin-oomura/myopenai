@@ -10,4 +10,4 @@ commanddata.txt
 *.m4a
 dist/
 build/
-myopenai.egg-info/
+*.egg-info/

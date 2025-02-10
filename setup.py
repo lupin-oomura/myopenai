@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name='myopenai',
-    version='2.1',
+    version='2.1.1',
     packages=find_packages(),
     package_data={
         'myopenai': ['pricedata.json'],
@@ -15,6 +15,7 @@ setup(
         'requests',
         'jsonschema',
         'pydantic',
+        'pyaudio',
     ],
     url='https://github.com/lupin-oomura/myopenai.git',
     author='Shin Oomura',
