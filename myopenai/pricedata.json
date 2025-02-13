@@ -521,7 +521,15 @@
       "unit": "per million tokens",
       "description": "Text tokens price"
     }
+  },
+  "gemini-2.0-flash": {
+    "text_tokens": {
+      "input_tokens": 0.1,
+      "cached_input_tokens": 0.025,
+      "output_tokens": 0.40,
+      "currency": "USD",
+      "unit": "per million tokens",
+      "description": "Text tokens price"
+    }
   }
-
-
 }

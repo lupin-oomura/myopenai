@@ -1,6 +1,6 @@
 Metadata-Version: 2.2
 Name: myopenai
-Version: 2.1
+Version: 2.1.2
 Summary: A simple OpenAI function package
 Home-page: https://github.com/lupin-oomura/myopenai.git
 Author: Shin Oomura
@@ -12,6 +12,7 @@ Requires-Dist: python-dotenv
 Requires-Dist: requests
 Requires-Dist: jsonschema
 Requires-Dist: pydantic
+Requires-Dist: pyaudio
 Dynamic: author
 Dynamic: author-email
 Dynamic: home-page
