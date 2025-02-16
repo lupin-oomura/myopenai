@@ -14,6 +14,7 @@ from typing import List
 import anthropic
 from jsonschema import validate, ValidationError
 import google.generativeai as gemini
+from google import genai
 
 #whisper用
 from io import BytesIO
@@ -29,6 +30,8 @@ class myopenai :
 
     def __init__(self, model:str=None) :
         self.client = OpenAI()
+        self.client_gemini = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
+        self.client_claude = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
         self.queue_response_text = queue.Queue()
         self.f_running = True
         self.messages = []
@@ -47,8 +50,15 @@ class myopenai :
         with open(os.path.join(current_dir, 'pricedata.json'), 'r') as f:
             self.d_pricedata = json.load(f)
 
-    def use_claude(self, api_key:str) :
+    def use_claude(self, api_key:str=None) :
+        if not api_key :
+            api_key = os.getenv("ANTHROPIC_API_KEY")
         self.client_claude = anthropic.Anthropic(api_key=api_key)
+    def use_gemini(self, api_key:str=None) :
+        if not api_key :
+            api_key = os.getenv("GEMINI_API_KEY")
+        self.client_gemini = genai.Client(api_key=api_key)
+        
     def is_running(self) :
         return self.f_running
     def is_running_or_queue(self) :
@@ -202,6 +212,70 @@ class myopenai :
         self.f_running = False
         return response
 
+
+    def run_claude(self, model:str="claude-3-5-sonnet-20241022") :
+        self.f_running = True
+
+        #Claude/geminiは「system」がエラーになるので、その対処
+        for msg in self.messages_claude :
+            if msg["role"] == "system" :
+                msg["role"] = "user"
+
+        # Claudeへのリクエストを作成
+        try:
+            response = self.client_claude.messages.create(
+                model=model,
+                messages=self.messages_claude,
+                max_tokens=1024,
+            )
+        except Exception as e:
+            print(e) #リトライすることがあるが、勝手にリトライするので、スルー（これがないとClientにエラー信号が行く）
+
+        # レスポンスの処理
+        res = response.content[0].text
+        self.add_message(json.dumps(res, ensure_ascii=False, indent=4), "assistant")
+        self.f_running = False
+
+        self.l_cost.append({
+            "model"               : response.model,
+            "tokens_input"        : response.usage.input_tokens,
+            "tokens_input_cached" : 0,
+            "tokens_input_audio"  : 0,
+            "tokens_output"       : response.usage.output_tokens,
+            "tokens_output_audio" : 0
+        })
+        self.f_running = False
+        return res
+    
+
+    def run_gemini(self, model:str="gemini-2.0-flash") :
+        self.f_running = True
+
+        #Claude/geminiは「system」がエラーになるので、その対処
+        for msg in self.messages_gemini :
+            if msg["role"] == "system" :
+                msg["role"] = "user"
+
+        response = self.client_gemini.models.generate_content(
+            model=model,
+            contents=self.messages_gemini
+        )
+        self.add_message(response.text, "assistant")
+        self.f_running = False
+
+        self.l_cost.append({
+            "model"               : response.model_version, #gemini-1.5-pro-002
+            "tokens_input"        : response.usage_metadata.prompt_token_count,
+            "tokens_input_cached" : 0,
+            "tokens_input_audio"  : 0,
+            "tokens_output"       : response.usage_metadata.candidates_token_count,
+            "tokens_output_audio" : 0
+        })
+        self.f_running = False
+
+        return response.text
+
+
     def run_so(self, ResponseStep, model:str=None) :
         self.f_running = True
         if not model :
@@ -341,7 +415,15 @@ class myopenai :
             "tokens_output_audio" : 0
         })
         self.f_running = False
-        return json.loads(response.text)
+
+        try:
+            res = json.loads(response.text)
+        except json.JSONDecodeError as e:
+            print(f"JSONデコードエラー: {e}")
+            open("json_conversion_error.txt", "w", encoding="utf-8").write(response.text)
+            print(response.text)
+            res = None  # エラー時のデフォルト値を設定
+        return res
 
     def run_to_audio(self, model:str=None) :
         self.f_running = True
@@ -633,7 +715,7 @@ if __name__ == "__main__" :
     #単純照会
     mo.add_message("あなたはアメリカメジャーリーグのスペシャリストです。", role="system")
     mo.add_message("大谷翔平の誕生日は？")
-    res = mo.run()
+    res = mo.run_gemini()
     print(res)
     print(mo.get_cost_all())
 

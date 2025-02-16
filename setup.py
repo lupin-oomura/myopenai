@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name='myopenai',
-    version='2.1.3',
+    version='2.2.1',
     packages=find_packages(),
     package_data={
         'myopenai': ['pricedata.json'],
@@ -11,6 +11,7 @@ setup(
         'openai',
         'anthropic',
         'google-generativeai',
+        'google-genai',
         'python-dotenv',
         'requests',
         'jsonschema',
