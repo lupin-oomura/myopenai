@@ -248,7 +248,7 @@ class myopenai :
         return res
     
 
-    def run_gemini(self, model:str="gemini-1.5-pro") :
+    def run_gemini(self, model:str="gemini-2.0-flash") :
         self.f_running = True
 
         #Claude/geminiは「system」がエラーになるので、その対処
@@ -708,7 +708,6 @@ class myopenai :
 if __name__ == "__main__" :
     load_dotenv()
     mo = myopenai("gpt-4o-mini")
-    mo.use_claude(os.getenv("ANTHROPIC_API_KEY"))
 
     #-----------------------------------------
     # 使い方あれこれ
