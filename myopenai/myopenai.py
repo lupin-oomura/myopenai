@@ -1,5 +1,6 @@
 from openai import OpenAI
 from dotenv import load_dotenv
+import pickle
 
 import  os
 import requests #画像downloadで使用
