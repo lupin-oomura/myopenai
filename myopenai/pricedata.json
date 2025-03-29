@@ -541,5 +541,15 @@
       "unit": "per million tokens",
       "description": "Text tokens price"
     }
+  },
+  "gemini-2.5-pro-exp-03-25": {
+    "text_tokens": {
+      "input_tokens": 1.25,
+      "cached_input_tokens": 1.25,
+      "output_tokens": 5.00,
+      "currency": "USD",
+      "unit": "per million tokens",
+      "description": "Text tokens price"
+    }
   }
 }

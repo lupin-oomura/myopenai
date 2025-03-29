@@ -391,7 +391,7 @@ class myopenai :
         return json_data
 
 
-    def run_so_gemini(self, ResponseStep, model:str="gemini-1.5-pro") :
+    def run_so_gemini(self, ResponseStep, model:str="gemini-2.0-flash") :
         self.f_running = True
 
         model = gemini.GenerativeModel(model_name=model)

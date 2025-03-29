@@ -1,5 +1,6 @@
 from openai import OpenAI
 from dotenv import load_dotenv
+import pickle
 
 import  os
 import requests #画像downloadで使用
@@ -691,15 +692,19 @@ class myopenai :
         return cost
 
 
-
     def save_messages(self, file_path:str) :
         messages = {"openai": self.messages, "claude": self.messages_claude, "gemini": self.messages_gemini}
-        with open(file_path, "w", encoding="utf-8") as f:
-            json.dump(messages, f, ensure_ascii=False, indent=4)
+        # with open(file_path, "w", encoding="utf-8") as f:
+        #     json.dump(messages, f, ensure_ascii=False, indent=4)
+        with open(f"{file_path}.pkl", "wb") as f:
+            pickle.dump(messages, f)        
 
     def load_messages(self, file_path:str) :
-        with open(file_path, "r", encoding="utf-8") as f:
-            messages = json.load(f)
+        with open(f"{file_path}.pkl", "rb") as f:
+            messages = pickle.load(f)
+        # with open(file_path, "r", encoding="utf-8") as f:
+        #     messages = json.load(f)
+
         self.messages = messages["openai"]
         self.messages_claude = messages["claude"]
         self.messages_gemini = messages["gemini"]
