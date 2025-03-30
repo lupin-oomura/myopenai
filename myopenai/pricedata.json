@@ -1,4 +1,14 @@
 {
+  "gpt-4o-search-preview-2025-03-11": {
+    "text_tokens": {
+      "input_tokens": 2.5,
+      "cached_input_tokens": 2.5,
+      "output_tokens": 10.0,
+      "currency": "USD",
+      "unit": "per million tokens",
+      "description": "Text tokens price"
+    }
+  },
   "gpt-4o-2024-08-06": {
     "text_tokens": {
       "input_tokens": 2.5,
