@@ -426,6 +426,49 @@ class myopenai :
             res = None  # エラー時のデフォルト値を設定
         return res
 
+    def run_search(self, model:str="gpt-4o-search-preview") :
+        completion = self.client.chat.completions.create(
+            model=model,
+            web_search_options={
+                "search_context_size": "low",
+            },
+            messages=self.messages,
+        )
+        response = completion.choices[0].message.content
+        self.add_message(response, "assistant")
+        self.f_running = False
+        self.l_cost.append({
+            "model"               : response.model,
+            "tokens_input"        : response.usage.prompt_tokens,
+            "tokens_input_cached" : response.usage.prompt_tokens_details.cached_tokens,
+            "tokens_input_audio"  : response.usage.prompt_tokens_details.audio_tokens,
+            "tokens_output"       : response.usage.completion_tokens,
+            "tokens_output_audio" : response.usage.completion_tokens_details.audio_tokens
+        })
+        return response
+
+    def run_so_search(self, ResponseStep, model:str="gpt-4o-search-preview") :
+        self.f_running = True
+        response = self.client.beta.chat.completions.parse(
+            model           = model,
+            # temperature     = 0,
+            messages        = self.messages,
+            response_format = ResponseStep,
+        )
+        self.add_message(response.choices[0].message.content, "assistant")
+        self.f_running = False
+
+        self.l_cost.append({
+            "model"               : response.model,
+            "tokens_input"        : response.usage.prompt_tokens,
+            "tokens_input_cached" : response.usage.prompt_tokens_details.cached_tokens,
+            "tokens_input_audio"  : response.usage.prompt_tokens_details.audio_tokens,
+            "tokens_output"       : response.usage.completion_tokens,
+            "tokens_output_audio" : response.usage.completion_tokens_details.audio_tokens
+        })
+        self.f_running = False
+        return response.choices[0].message.parsed
+
     def run_to_audio(self, model:str=None) :
         self.f_running = True
         if not model :

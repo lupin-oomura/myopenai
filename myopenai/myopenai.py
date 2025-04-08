@@ -176,7 +176,17 @@ class myopenai :
         j = {"role": role, "content": content}
         self.messages.append(j)
         self.messages_claude.append(j) #とりあえず。たぶんこれではだめ
-        self.messages_gemini.append(j) #とりあえず。たぶんこれではだめ
+
+        con_gemini = [
+            text,
+            genai.types.Part.from_bytes(
+                data=audiodata,
+                mime_type=f"audio/{format}"
+            )
+        ]
+        # self.messages_gemini.append({"role": role, "content": con_gemini})
+        self.messages_gemini.append(con_gemini)
+
 
     def add_audio_fromfile(self, file_path, role:str="user") :
         audio_data = open(file_path, "rb").read()
@@ -254,8 +264,10 @@ class myopenai :
 
         #Claude/geminiは「system」がエラーになるので、その対処
         for msg in self.messages_gemini :
-            if msg["role"] == "system" :
-                msg["role"] = "user"
+            #msgが辞書型だったら
+            if isinstance(msg, dict) :
+                if msg["role"] == "system" :
+                    msg["role"] = "user"
 
         response = self.client_gemini.models.generate_content(
             model=model,
@@ -394,16 +406,25 @@ class myopenai :
     def run_so_gemini(self, ResponseStep, model:str="gemini-2.0-flash") :
         self.f_running = True
 
-        model = gemini.GenerativeModel(model_name=model)
-        try :
-            response = model.generate_content(
-                self.messages_gemini,
-                generation_config=gemini.GenerationConfig(
-                    response_mime_type="application/json", response_schema=ResponseStep
-                ),
-            )
-        except Exception as e:
-            pass #リトライすることがあるが、勝手にリトライするので、スルー（これがないとClientにエラー信号が行く）
+        response = self.client_gemini.models.generate_content(
+            model=model,
+            contents=self.messages_gemini,
+            config={
+                'response_mime_type': 'application/json',
+                'response_schema': ResponseStep,
+            },
+        )
+
+        # model = gemini.GenerativeModel(model_name=model)
+        # try :
+        #     response = model.generate_content(
+        #         self.messages_gemini,
+        #         generation_config=gemini.GenerationConfig(
+        #             response_mime_type="application/json", response_schema=ResponseStep
+        #         ),
+        #     )
+        # except Exception as e:
+        #     pass #リトライすることがあるが、勝手にリトライするので、スルー（これがないとClientにエラー信号が行く）
         self.add_message(response.text, "assistant")
         self.f_running = False
 
@@ -417,13 +438,15 @@ class myopenai :
         })
         self.f_running = False
 
-        try:
-            res = json.loads(response.text)
-        except json.JSONDecodeError as e:
-            print(f"JSONデコードエラー: {e}")
-            open("json_conversion_error.txt", "w", encoding="utf-8").write(response.text)
-            print(response.text)
-            res = None  # エラー時のデフォルト値を設定
+        # try:
+        #     res = json.loads(response.text)
+        # except json.JSONDecodeError as e:
+        #     print(f"JSONデコードエラー: {e}")
+        #     open("json_conversion_error.txt", "w", encoding="utf-8").write(response.text)
+        #     print(response.text)
+        #     res = None  # エラー時のデフォルト値を設定
+        res = response.parsed
+        res = res.model_dump()
         return res
 
     def run_search(self, model:str="gpt-4o-search-preview") :
@@ -757,45 +780,46 @@ if __name__ == "__main__" :
     load_dotenv()
     mo = myopenai("gpt-4o-mini")
 
-    #-----------------------------------------
-    # 使い方あれこれ
-    #-----------------------------------------
-    #単純照会
-    mo.add_message("あなたはアメリカメジャーリーグのスペシャリストです。", role="system")
-    mo.add_message("大谷翔平の誕生日は？")
-    res = mo.run_gemini()
-    print(res)
-    print(mo.get_cost_all())
+    # #-----------------------------------------
+    # # 使い方あれこれ
+    # #-----------------------------------------
+    # #単純照会
+    # mo.add_message("あなたはアメリカメジャーリーグのスペシャリストです。", role="system")
+    # mo.add_message("大谷翔平の誕生日は？")
+    # res = mo.run_gemini()
+    # print(res)
+    # print(mo.get_cost_all())
 
-    #ストリーミング表示
-    mo.add_message("結婚してる？")
-    run_thread = threading.Thread(target=mo.run_stream, kwargs={})
-    run_thread.start()
-    while mo.is_running_or_queue():
-        print(mo.get_queue(), end="", flush=True)
-        time.sleep(0.1)
-    print("\n")
-    run_thread.join()
+    # #ストリーミング表示
+    # mo.add_message("結婚してる？")
+    # run_thread = threading.Thread(target=mo.run_stream, kwargs={})
+    # run_thread.start()
+    # while mo.is_running_or_queue():
+    #     print(mo.get_queue(), end="", flush=True)
+    #     time.sleep(0.1)
+    # print("\n")
+    # run_thread.join()
 
-    #--- 音声で回答させるサンプル --------
-    # 文章で質問->音声で回答
-    mo.add_message("性別は？")
-    wav = mo.run_to_audio(model="gpt-4o-mini-audio-preview") #音声が入っている場合は、このモデルがマスト
-    open("回答.wav", "wb").write(wav)
+    # #--- 音声で回答させるサンプル --------
+    # # 文章で質問->音声で回答
+    # mo.add_message("性別は？")
+    # wav = mo.run_to_audio(model="gpt-4o-mini-audio-preview") #音声が入っている場合は、このモデルがマスト
+    # open("回答.wav", "wb").write(wav)
 
-    # 準備
-    # mo.text_to_speech("出身地についても教えて", "speech_sample1.mp3")
-    # mo.text_to_speech("奥さんの名前は？", "speech_sample2.mp3")
+    # # 準備
+    # # mo.text_to_speech("出身地についても教えて", "speech_sample1.mp3")
+    # # mo.text_to_speech("奥さんの名前は？", "speech_sample2.mp3")
 
-    # 音声で質問->音声で回答
-    mo.add_audio_fromfile("speech_sample1.mp3")
-    wav = mo.run_to_audio(model="gpt-4o-mini-audio-preview") #音声が入っている場合は、このモデルがマスト
-    open("回答.wav", "wb").write(wav)
+    # # 音声で質問->音声で回答
+    # mo.add_audio_fromfile("speech_sample1.mp3")
+    # wav = mo.run_to_audio(model="gpt-4o-mini-audio-preview") #音声が入っている場合は、このモデルがマスト
+    # open("回答.wav", "wb").write(wav)
 
-    # 音声で質問->テキストで回答（多分早い）
-    mo.add_audio_fromfile("speech_sample2.mp3")
-    response = mo.run(model="gpt-4o-mini-audio-preview") #音声が入っている場合は、このモデルがマスト
-    print(response)
+    # # 音声で質問->テキストで回答（多分早い）
+    # mo.add_audio_fromfile("speech_sample2.mp3")
+    # response = mo.run(model="gpt-4o-mini-audio-preview") #音声が入っている場合は、このモデルがマスト
+    # # response = mo.run_gemini(model="gemini-2.5-pro-exp-03-25")  #geminiは、マルチターンは未対応（1回の質問だけ）
+    # print(response)
 
     #-----------------------------------------
     # 構造化データで回答を得る
@@ -811,8 +835,9 @@ if __name__ == "__main__" :
     class responsemodel(BaseModel):
         personal_infos : List[personal_info]
 
-    response_data = mo.run_so(responsemodel)
-    l_personal_infos = [x.model_dump() for x in response_data.personal_infos]
+    # response_data = mo.run_so(responsemodel)
+    # l_personal_infos = [x.model_dump() for x in response_data.personal_infos]
+    l_personal_infos = mo.run_so_gemini(responsemodel, model="gemini-2.5-pro-exp-03-25")
     print(l_personal_infos)
 
     #-----------------------------------------
