@@ -2,7 +2,7 @@ from openai import OpenAI
 from dotenv import load_dotenv
 import pickle
 
-import  os
+import  os, re
 import requests #画像downloadで使用
 import threading
 import time
@@ -406,6 +406,13 @@ class myopenai :
     def run_so_gemini(self, ResponseStep, model:str="gemini-2.0-flash") :
         self.f_running = True
 
+        #Claude/geminiは「system」がエラーになるので、その対処
+        for msg in self.messages_gemini :
+            #msgが辞書型だったら
+            if isinstance(msg, dict) :
+                if msg["role"] == "system" :
+                    msg["role"] = "user"
+
         response = self.client_gemini.models.generate_content(
             model=model,
             contents=self.messages_gemini,
@@ -445,8 +452,17 @@ class myopenai :
         #     open("json_conversion_error.txt", "w", encoding="utf-8").write(response.text)
         #     print(response.text)
         #     res = None  # エラー時のデフォルト値を設定
-        res = response.parsed
-        res = res.model_dump()
+        if response.parsed :
+            res = response.parsed
+            res = res.model_dump()
+        else :
+            pattern = r'```json\s*([\s\S]+)\s*```'
+            match = re.search(pattern, response.text, re.DOTALL)
+            if match :
+                txt_json = match.group(1).strip()
+                res = json.loads(txt_json)
+            else :
+                res = None
         return res
 
     def run_search(self, model:str="gpt-4o-search-preview") :

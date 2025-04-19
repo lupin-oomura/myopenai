@@ -42,7 +42,7 @@ class myopenai :
         if model :
             self.default_model = model
         else :
-            self.default_model = "gpt-4o-mini"
+            self.default_model = "gpt-4.1-mini"
 
         gemini.configure(api_key=os.getenv("GEMINI_API_KEY"))
 
@@ -259,7 +259,7 @@ class myopenai :
         return res
     
 
-    def run_gemini(self, model:str="gemini-2.0-flash") :
+    def run_gemini(self, model:str="gemini-2.5-flash-preview-04-17") :
         self.f_running = True
 
         #Claude/geminiは「system」がエラーになるので、その対処
@@ -794,48 +794,48 @@ class myopenai :
 
 if __name__ == "__main__" :
     load_dotenv()
-    mo = myopenai("gpt-4o-mini")
+    mo = myopenai("gpt-4.1")
 
-    # #-----------------------------------------
-    # # 使い方あれこれ
-    # #-----------------------------------------
-    # #単純照会
-    # mo.add_message("あなたはアメリカメジャーリーグのスペシャリストです。", role="system")
-    # mo.add_message("大谷翔平の誕生日は？")
-    # res = mo.run_gemini()
-    # print(res)
-    # print(mo.get_cost_all())
+    #-----------------------------------------
+    # 使い方あれこれ
+    #-----------------------------------------
+    #単純照会
+    mo.add_message("あなたはアメリカメジャーリーグのスペシャリストです。", role="system")
+    mo.add_message("大谷翔平の誕生日は？")
+    res = mo.run_gemini()
+    print(res)
+    print(mo.get_cost_all())
 
-    # #ストリーミング表示
-    # mo.add_message("結婚してる？")
-    # run_thread = threading.Thread(target=mo.run_stream, kwargs={})
-    # run_thread.start()
-    # while mo.is_running_or_queue():
-    #     print(mo.get_queue(), end="", flush=True)
-    #     time.sleep(0.1)
-    # print("\n")
-    # run_thread.join()
+    #ストリーミング表示
+    mo.add_message("結婚してる？")
+    run_thread = threading.Thread(target=mo.run_stream, kwargs={})
+    run_thread.start()
+    while mo.is_running_or_queue():
+        print(mo.get_queue(), end="", flush=True)
+        time.sleep(0.1)
+    print("\n")
+    run_thread.join()
 
-    # #--- 音声で回答させるサンプル --------
-    # # 文章で質問->音声で回答
-    # mo.add_message("性別は？")
-    # wav = mo.run_to_audio(model="gpt-4o-mini-audio-preview") #音声が入っている場合は、このモデルがマスト
-    # open("回答.wav", "wb").write(wav)
+    #--- 音声で回答させるサンプル --------
+    # 文章で質問->音声で回答
+    mo.add_message("性別は？")
+    wav = mo.run_to_audio(model="gpt-4o-mini-audio-preview") #音声が入っている場合は、このモデルがマスト
+    open("回答.wav", "wb").write(wav)
 
-    # # 準備
-    # # mo.text_to_speech("出身地についても教えて", "speech_sample1.mp3")
-    # # mo.text_to_speech("奥さんの名前は？", "speech_sample2.mp3")
+    # 準備
+    # mo.text_to_speech("出身地についても教えて", "speech_sample1.mp3")
+    # mo.text_to_speech("奥さんの名前は？", "speech_sample2.mp3")
 
-    # # 音声で質問->音声で回答
-    # mo.add_audio_fromfile("speech_sample1.mp3")
-    # wav = mo.run_to_audio(model="gpt-4o-mini-audio-preview") #音声が入っている場合は、このモデルがマスト
-    # open("回答.wav", "wb").write(wav)
+    # 音声で質問->音声で回答
+    mo.add_audio_fromfile("speech_sample1.mp3")
+    wav = mo.run_to_audio(model="gpt-4o-mini-audio-preview") #音声が入っている場合は、このモデルがマスト
+    open("回答.wav", "wb").write(wav)
 
-    # # 音声で質問->テキストで回答（多分早い）
-    # mo.add_audio_fromfile("speech_sample2.mp3")
-    # response = mo.run(model="gpt-4o-mini-audio-preview") #音声が入っている場合は、このモデルがマスト
-    # # response = mo.run_gemini(model="gemini-2.5-pro-exp-03-25")  #geminiは、マルチターンは未対応（1回の質問だけ）
-    # print(response)
+    # 音声で質問->テキストで回答（多分早い）
+    mo.add_audio_fromfile("speech_sample2.mp3")
+    response = mo.run(model="gpt-4o-mini-audio-preview") #音声が入っている場合は、このモデルがマスト
+    # response = mo.run_gemini(model="gemini-2.5-pro-exp-03-25")  #geminiは、マルチターンは未対応（1回の質問だけ）
+    print(response)
 
     #-----------------------------------------
     # 構造化データで回答を得る
