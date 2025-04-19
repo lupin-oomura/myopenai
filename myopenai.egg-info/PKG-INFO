@@ -1,6 +1,6 @@
-Metadata-Version: 2.4
+Metadata-Version: 2.2
 Name: myopenai
-Version: 2.2.7
+Version: 2.2.8
 Summary: A simple OpenAI function package
 Home-page: https://github.com/lupin-oomura/myopenai.git
 Author: Shin Oomura

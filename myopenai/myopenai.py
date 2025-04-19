@@ -15,13 +15,16 @@ from typing import List
 import anthropic
 from jsonschema import validate, ValidationError
 import google.generativeai as gemini
-from google import genai
+from google.generativeai import GenerationConfig
 
 #whisper用
 from io import BytesIO
 import wave
 import pyaudio
+import mimetypes
 
+
+model_gemini_default = "gemini-2.5-flash-preview-04-17"
 
 class myopenai :
 
@@ -29,9 +32,10 @@ class myopenai :
     client = None 
     default_model = None
 
-    def __init__(self, model:str=None) :
+    def __init__(self, model:str=None, model_gemini:str=model_gemini_default) :
         self.client = OpenAI()
-        self.client_gemini = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
+        self.use_gemini(model_gemini)
+        self.model_name_gemini = model_gemini
         self.client_claude = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
         self.queue_response_text = queue.Queue()
         self.f_running = True
@@ -55,10 +59,11 @@ class myopenai :
         if not api_key :
             api_key = os.getenv("ANTHROPIC_API_KEY")
         self.client_claude = anthropic.Anthropic(api_key=api_key)
-    def use_gemini(self, api_key:str=None) :
+    def use_gemini(self, model_gemini, api_key:str=None) :
         if not api_key :
             api_key = os.getenv("GEMINI_API_KEY")
-        self.client_gemini = genai.Client(api_key=api_key)
+        gemini.configure(api_key=os.environ['GEMINI_API_KEY'])
+        self.client_gemini = gemini.GenerativeModel(model_name=model_gemini)
         
     def is_running(self) :
         return self.f_running
@@ -130,9 +135,18 @@ class myopenai :
         self.messages.append(data)
         self.messages_claude.append(data)
 
-        # Google Geminiの場合
-        parts = [{"text": msg}]
-        self.messages_gemini.append({"role": role, "parts": parts})
+        # Google Geminiの場合、systemは別で指定することになっている
+        if role == "system" :
+            self.client_gemini = gemini.GenerativeModel(
+                model_name          = self.model_name_gemini,
+                system_instruction  = msg
+            )
+        elif role == "assistant" :
+            data = {"role": "model", "parts": [{"text": msg}]}
+            self.messages_gemini.append(data)
+        else :
+            parts = [{"text": msg}]
+            self.messages_gemini.append({"role": role, "parts": parts})
 
 
     def add_message_with_image(self, prompt:str, file_path:str, role:str="user") :
@@ -162,6 +176,9 @@ class myopenai :
 
 
     def add_audiodata(self, audiodata, format, text:str=None, role:str="user") :
+        #claudeは未実装
+
+        #--- OpenAIの場合
         data_b64 = base64.b64encode(audiodata).decode('utf-8')
         content = [{
                 "type": "input_audio",
@@ -175,17 +192,12 @@ class myopenai :
 
         j = {"role": role, "content": content}
         self.messages.append(j)
-        self.messages_claude.append(j) #とりあえず。たぶんこれではだめ
 
-        con_gemini = [
-            text,
-            genai.types.Part.from_bytes(
-                data=audiodata,
-                mime_type=f"audio/{format}"
-            )
-        ]
-        # self.messages_gemini.append({"role": role, "content": con_gemini})
-        self.messages_gemini.append(con_gemini)
+        #--- Geminiの場合
+        mime_type, _ = mimetypes.guess_type(f"aaa.{format}")
+        audio_part = {'inline_data': {'mime_type': mime_type, 'data': audiodata}}
+        cont_gemini = {'role': 'user', 'parts': [audio_part]} 
+        self.messages_gemini.append(cont_gemini)
 
 
     def add_audio_fromfile(self, file_path, role:str="user") :
@@ -259,28 +271,33 @@ class myopenai :
         return res
     
 
-    def run_gemini(self, model:str="gemini-2.5-flash-preview-04-17") :
+    def run_gemini(self) :
+        # モデルを上書きできなくなった(なのでイニシャライズで指定してる)
         self.f_running = True
 
-        #Claude/geminiは「system」がエラーになるので、その対処
-        for msg in self.messages_gemini :
-            #msgが辞書型だったら
-            if isinstance(msg, dict) :
-                if msg["role"] == "system" :
-                    msg["role"] = "user"
-
-        response = self.client_gemini.models.generate_content(
-            model=model,
-            contents=self.messages_gemini
+        response = self.client_gemini.generate_content(
+            contents=self.messages_gemini,
         )
         self.add_message(response.text, "assistant")
         self.f_running = False
 
+        #コスト計算：audioが含まれていたら、ざっくり6倍にする（本当は按分だが、今のレスポンスではtext/audioの区分がないので）
+        token_text = response.usage_metadata.prompt_token_count
+        token_audio = 0
+        for x in self.messages_gemini :
+            for y in x['parts'] :
+                if "inline_data" in y.keys() and 'audio' in y['inline_data']['mime_type'] :
+                    token_audio = token_text
+                    token_text = 0
+                    break
+            if token_audio > 0 :
+                break
+
         self.l_cost.append({
             "model"               : response.model_version, #gemini-1.5-pro-002
-            "tokens_input"        : response.usage_metadata.prompt_token_count,
-            "tokens_input_cached" : 0,
-            "tokens_input_audio"  : 0,
+            "tokens_input"        : token_text,
+            "tokens_input_cached" : response.usage_metadata.cached_content_token_count,
+            "tokens_input_audio"  : token_audio,
             "tokens_output"       : response.usage_metadata.candidates_token_count,
             "tokens_output_audio" : 0
         })
@@ -403,23 +420,15 @@ class myopenai :
         return json_data
 
 
-    def run_so_gemini(self, ResponseStep, model:str="gemini-2.0-flash") :
+    def run_so_gemini(self, ResponseStep) :
         self.f_running = True
 
-        #Claude/geminiは「system」がエラーになるので、その対処
-        for msg in self.messages_gemini :
-            #msgが辞書型だったら
-            if isinstance(msg, dict) :
-                if msg["role"] == "system" :
-                    msg["role"] = "user"
-
-        response = self.client_gemini.models.generate_content(
-            model=model,
+        response = self.client_gemini.generate_content(
             contents=self.messages_gemini,
-            config={
-                'response_mime_type': 'application/json',
-                'response_schema': ResponseStep,
-            },
+            generation_config=GenerationConfig(
+                response_mime_type="application/json",
+                response_schema=ResponseStep,
+            )
         )
 
         # model = gemini.GenerativeModel(model_name=model)
@@ -435,15 +444,27 @@ class myopenai :
         self.add_message(response.text, "assistant")
         self.f_running = False
 
+        token_text = response.usage_metadata.prompt_token_count
+        token_audio = 0
+        for x in self.messages_gemini :
+            for y in x['parts'] :
+                if "inline_data" in y.keys() and 'audio' in y['inline_data']['mime_type'] :
+                    token_audio = token_text
+                    token_text = 0
+                    break
+            if token_audio > 0 :
+                break
+
         self.l_cost.append({
             "model"               : response.model_version, #gemini-1.5-pro-002
-            "tokens_input"        : response.usage_metadata.prompt_token_count,
-            "tokens_input_cached" : 0,
-            "tokens_input_audio"  : 0,
+            "tokens_input"        : token_text,
+            "tokens_input_cached" : response.usage_metadata.cached_content_token_count,
+            "tokens_input_audio"  : token_audio,
             "tokens_output"       : response.usage_metadata.candidates_token_count,
             "tokens_output_audio" : 0
         })
         self.f_running = False
+
 
         # try:
         #     res = json.loads(response.text)
@@ -452,17 +473,18 @@ class myopenai :
         #     open("json_conversion_error.txt", "w", encoding="utf-8").write(response.text)
         #     print(response.text)
         #     res = None  # エラー時のデフォルト値を設定
-        if response.parsed :
-            res = response.parsed
-            res = res.model_dump()
-        else :
-            pattern = r'```json\s*([\s\S]+)\s*```'
-            match = re.search(pattern, response.text, re.DOTALL)
-            if match :
-                txt_json = match.group(1).strip()
-                res = json.loads(txt_json)
-            else :
-                res = None
+        # if response.parsed :
+        #     res = response.parsed
+        #     res = res.model_dump()
+        # else :
+        #     pattern = r'```json\s*([\s\S]+)\s*```'
+        #     match = re.search(pattern, response.text, re.DOTALL)
+        #     if match :
+        #         txt_json = match.group(1).strip()
+        #         res = json.loads(txt_json)
+        #     else :
+        #         res = None
+        res = json.loads(response.text)
         return res
 
     def run_search(self, model:str="gpt-4o-search-preview") :
@@ -796,46 +818,66 @@ if __name__ == "__main__" :
     load_dotenv()
     mo = myopenai("gpt-4.1")
 
+    # 準備(音声ファイル準備)
+    # mo.text_to_speech("出身地についても教えて", "speech_sample1.mp3")
+    # mo.text_to_speech("奥さんの名前は？", "speech_sample2.mp3")
+
     #-----------------------------------------
     # 使い方あれこれ
     #-----------------------------------------
-    #単純照会
+    # # OpenAIの場合
+    # #単純照会
+    # mo.add_message("あなたはアメリカメジャーリーグのスペシャリストです。", role="system")
+    # mo.add_message("大谷翔平の誕生日は？")
+    # res = mo.run()
+    # print(res)
+    # print(mo.get_cost_all())
+
+    # #ストリーミング表示
+    # mo.add_message("結婚してる？")
+    # run_thread = threading.Thread(target=mo.run_stream, kwargs={})
+    # run_thread.start()
+    # while mo.is_running_or_queue():
+    #     print(mo.get_queue(), end="", flush=True)
+    #     time.sleep(0.1)
+    # print("\n")
+    # run_thread.join()
+
+    # # 音声で質問 --> 文章で回答
+    # mo.add_audio_fromfile("speech_sample1.mp3")
+    # res = mo.run(model="gpt-4o-mini-audio-preview") #音声が入っている場合は、このモデルがマスト
+    # print(res)
+    # print(mo.get_cost_all())
+
+    #-----------------------------------
+    #--- Gemini ------------------------
+    mo.delete_all_messages()
     mo.add_message("あなたはアメリカメジャーリーグのスペシャリストです。", role="system")
     mo.add_message("大谷翔平の誕生日は？")
     res = mo.run_gemini()
     print(res)
     print(mo.get_cost_all())
 
-    #ストリーミング表示
-    mo.add_message("結婚してる？")
-    run_thread = threading.Thread(target=mo.run_stream, kwargs={})
-    run_thread.start()
-    while mo.is_running_or_queue():
-        print(mo.get_queue(), end="", flush=True)
-        time.sleep(0.1)
-    print("\n")
-    run_thread.join()
+    #ストリーミング表示は未実装
 
-    #--- 音声で回答させるサンプル --------
-    # 文章で質問->音声で回答
-    mo.add_message("性別は？")
-    wav = mo.run_to_audio(model="gpt-4o-mini-audio-preview") #音声が入っている場合は、このモデルがマスト
-    open("回答.wav", "wb").write(wav)
-
-    # 準備
-    # mo.text_to_speech("出身地についても教えて", "speech_sample1.mp3")
-    # mo.text_to_speech("奥さんの名前は？", "speech_sample2.mp3")
-
-    # 音声で質問->音声で回答
+    # 音声で質問 --> 文章で回答
     mo.add_audio_fromfile("speech_sample1.mp3")
-    wav = mo.run_to_audio(model="gpt-4o-mini-audio-preview") #音声が入っている場合は、このモデルがマスト
-    open("回答.wav", "wb").write(wav)
+    res = mo.run_gemini()
+    print(res)
+    print(mo.get_cost_all())
 
-    # 音声で質問->テキストで回答（多分早い）
-    mo.add_audio_fromfile("speech_sample2.mp3")
-    response = mo.run(model="gpt-4o-mini-audio-preview") #音声が入っている場合は、このモデルがマスト
-    # response = mo.run_gemini(model="gemini-2.5-pro-exp-03-25")  #geminiは、マルチターンは未対応（1回の質問だけ）
-    print(response)
+
+    # #--- 音声で回答させるサンプル --------
+    # # 文章で質問->音声で回答
+    # mo.delete_all_messages()
+    # mo.add_message("大谷翔平の性別は？")
+    # wav = mo.run_to_audio(model="gpt-4o-mini-audio-preview") #音声が入っている場合は、このモデルがマスト
+    # open("回答.wav", "wb").write(wav)
+
+    # #--- 音声で質問->音声で回答 ------------
+    # mo.add_audio_fromfile("speech_sample1.mp3")
+    # wav = mo.run_to_audio(model="gpt-4o-mini-audio-preview") #音声が入っている場合は、このモデルがマスト
+    # open("回答.wav", "wb").write(wav)
 
     #-----------------------------------------
     # 構造化データで回答を得る
@@ -853,7 +895,7 @@ if __name__ == "__main__" :
 
     # response_data = mo.run_so(responsemodel)
     # l_personal_infos = [x.model_dump() for x in response_data.personal_infos]
-    l_personal_infos = mo.run_so_gemini(responsemodel, model="gemini-2.5-pro-exp-03-25")
+    l_personal_infos = mo.run_so_gemini(responsemodel)
     print(l_personal_infos)
 
     #-----------------------------------------
