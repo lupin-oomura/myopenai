@@ -149,6 +149,9 @@ class myopenai :
             self.messages_gemini.append({"role": role, "parts": parts})
 
 
+
+
+
     def add_message_with_image(self, prompt:str, file_path:str, role:str="user") :
         img_bytes = open(file_path, "rb").read()
         img_base64 = base64.b64encode(img_bytes).decode('utf-8')
@@ -199,11 +202,28 @@ class myopenai :
         cont_gemini = {'role': 'user', 'parts': [audio_part]} 
         self.messages_gemini.append(cont_gemini)
 
-
     def add_audio_fromfile(self, file_path, role:str="user") :
         audio_data = open(file_path, "rb").read()
         ext = os.path.splitext(file_path)[1].replace(".","")
         self.add_audiodata(audio_data, ext, role)
+
+    def add_message_with_audio(self, prompt:str, file_path:str) : #roleはuser固定
+        # geminiのための関数（openai/claudeは未実装）
+        myfile = gemini.upload_file(path=file_path)
+        audio_part = {
+            "file_data": {
+                "mime_type": myfile.mime_type,
+                "file_uri": myfile.uri
+            }
+        }
+        # プロンプト＋音声ファイルを履歴に追加
+        self.messages_gemini.append({
+            "role": "user",
+            "parts": [
+                {"text": prompt},
+                audio_part
+            ]
+        })
 
     def get_queue(self) -> str :
         token = ""
@@ -278,27 +298,33 @@ class myopenai :
         response = self.client_gemini.generate_content(
             contents=self.messages_gemini,
         )
+        total_tokens = response.usage_metadata.total_token_count
+        token_input_text = response.usage_metadata.prompt_token_count
+        token_input_text_cached = response.usage_metadata.cached_content_token_count
+        token_output_text = response.usage_metadata.candidates_token_count
+        token_input_audio = total_tokens - token_input_text - token_input_text_cached - token_output_text
+
         self.add_message(response.text, "assistant")
         self.f_running = False
 
-        #コスト計算：audioが含まれていたら、ざっくり6倍にする（本当は按分だが、今のレスポンスではtext/audioの区分がないので）
-        token_text = response.usage_metadata.prompt_token_count
-        token_audio = 0
-        for x in self.messages_gemini :
-            for y in x['parts'] :
-                if "inline_data" in y.keys() and 'audio' in y['inline_data']['mime_type'] :
-                    token_audio = token_text
-                    token_text = 0
-                    break
-            if token_audio > 0 :
-                break
-
+        # #コスト計算：audioが含まれていたら、ざっくり6倍にする（本当は按分だが、今のレスポンスではtext/audioの区分がないので）
+        # token_text = response.usage_metadata.prompt_token_count
+        # token_audio = 0
+        # for x in self.messages_gemini :
+        #     for y in x['parts'] :
+        #         if "inline_data" in y.keys() and 'audio' in y['inline_data']['mime_type'] :
+        #             token_audio = token_text
+        #             token_text = 0
+        #             break
+        #     if token_audio > 0 :
+        #         break
+        
         self.l_cost.append({
             "model"               : response.model_version,
-            "tokens_input"        : token_text,
-            "tokens_input_cached" : response.usage_metadata.cached_content_token_count,
-            "tokens_input_audio"  : token_audio,
-            "tokens_output"       : response.usage_metadata.candidates_token_count,
+            "tokens_input"        : token_input_text,
+            "tokens_input_cached" : token_input_text_cached ,
+            "tokens_input_audio"  : token_input_audio,
+            "tokens_output"       : token_output_text,
             "tokens_output_audio" : 0
         })
         self.f_running = False
@@ -441,26 +467,35 @@ class myopenai :
         #     )
         # except Exception as e:
         #     pass #リトライすることがあるが、勝手にリトライするので、スルー（これがないとClientにエラー信号が行く）
+
+
+        total_tokens            = response.usage_metadata.total_token_count
+        token_input_text        = response.usage_metadata.prompt_token_count
+        token_input_text_cached = response.usage_metadata.cached_content_token_count
+        token_output_text       = response.usage_metadata.candidates_token_count
+        token_input_audio       = total_tokens - token_input_text - token_input_text_cached - token_output_text
+
         self.add_message(response.text, "assistant")
         self.f_running = False
 
-        token_text = response.usage_metadata.prompt_token_count
-        token_audio = 0
-        for x in self.messages_gemini :
-            for y in x['parts'] :
-                if "inline_data" in y.keys() and 'audio' in y['inline_data']['mime_type'] :
-                    token_audio = token_text
-                    token_text = 0
-                    break
-            if token_audio > 0 :
-                break
+        # token_text = response.usage_metadata.prompt_token_count
+        # token_audio = 0
+        # for x in self.messages_gemini :
+        #     for y in x['parts'] :
+        #         if "inline_data" in y.keys() and 'audio' in y['inline_data']['mime_type'] :
+        #             token_audio = token_text
+        #             token_text = 0
+        #             break
+        #     if token_audio > 0 :
+        #         break
 
+        
         self.l_cost.append({
-            "model"               : response.model_version, #gemini-1.5-pro-002
-            "tokens_input"        : token_text,
-            "tokens_input_cached" : response.usage_metadata.cached_content_token_count,
-            "tokens_input_audio"  : token_audio,
-            "tokens_output"       : response.usage_metadata.candidates_token_count,
+            "model"               : response.model_version,
+            "tokens_input"        : token_input_text,
+            "tokens_input_cached" : token_input_text_cached ,
+            "tokens_input_audio"  : token_input_audio,
+            "tokens_output"       : token_output_text,
             "tokens_output_audio" : 0
         })
         self.f_running = False
@@ -484,7 +519,13 @@ class myopenai :
         #         res = json.loads(txt_json)
         #     else :
         #         res = None
-        res = json.loads(response.text)
+        try :
+            res = json.loads(response.text)
+        except json.JSONDecodeError as e:
+            print(f"JSONデコードエラー: {e}")
+            open("json_conversion_error.txt", "w", encoding="utf-8").write(response.text)
+            print(response.text)
+            res = None
         return res
 
     def run_search(self, model:str="gpt-4o-search-preview") :
@@ -851,7 +892,6 @@ if __name__ == "__main__" :
 
     #-----------------------------------
     #--- Gemini ------------------------
-    mo.delete_all_messages()
     mo.add_message("あなたはアメリカメジャーリーグのスペシャリストです。", role="system")
     mo.add_message("大谷翔平の誕生日は？")
     res = mo.run_gemini()
@@ -907,6 +947,12 @@ if __name__ == "__main__" :
     # Whisper(Speech to Text)
     text = mo.speech_to_text_from_file("speech_sample1.mp3")
     print(text)
+
+    # geminiで文字起こし
+    mo.delete_all_messages()
+    mo.add_message_with_audio("文字起こしして", "speech_sample1.mp3")
+    res = mo.run_gemini()
+    print(res)
 
     #-----------------------------------------
     # 料金計算
