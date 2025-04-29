@@ -3,6 +3,7 @@ setup.py
 myopenai/__init__.py
 myopenai/myopenai.py
 myopenai/pricedata.json
+myopenai/test_google_multi_turn.py
 myopenai.egg-info/PKG-INFO
 myopenai.egg-info/SOURCES.txt
 myopenai.egg-info/dependency_links.txt
