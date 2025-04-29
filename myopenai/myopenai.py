@@ -294,7 +294,7 @@ class myopenai :
                 break
 
         self.l_cost.append({
-            "model"               : response.model_version, #gemini-1.5-pro-002
+            "model"               : response.model_version,
             "tokens_input"        : token_text,
             "tokens_input_cached" : response.usage_metadata.cached_content_token_count,
             "tokens_input_audio"  : token_audio,
@@ -816,7 +816,7 @@ class myopenai :
 
 if __name__ == "__main__" :
     load_dotenv()
-    mo = myopenai("gpt-4.1")
+    mo = myopenai("gpt-4.1", model_gemini="gemini-2.5-pro-exp-03-25")
 
     # 準備(音声ファイル準備)
     # mo.text_to_speech("出身地についても教えて", "speech_sample1.mp3")

@@ -616,7 +616,7 @@
       "description": "Audio tokens price"
     }
   },
-  "gemini-2.5-flash-preview-04-17": {
+  "models/gemini-2.5-flash-preview-04-17": {
     "text_tokens": {
       "input_tokens": 0.15, 
       "cached_input_tokens": 0.15,
