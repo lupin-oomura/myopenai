@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name='myopenai',
-    version='2.3.3',
+    version='2.3.4',
     packages=find_packages(),
     package_data={
         'myopenai': ['pricedata.json'],

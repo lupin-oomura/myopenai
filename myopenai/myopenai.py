@@ -854,9 +854,62 @@ class myopenai :
         self.messages_claude = messages["claude"]
         self.messages_gemini = messages["gemini"]
 
+    #---------------------------------------------------------
+    # プロンプトを整形する（改行ごとに、前後の空白を除去）
+    #---------------------------------------------------------
+    def format_prompt(self, pmt: str):
+        return "\n".join([x.strip() for x in pmt.split("\n")])
+
+
+
+def sample_text_to_speech() :
+    mo = myopenai("gpt-4.1", model_gemini="gemini-2.5-pro-exp-03-25")
+    # mo.text_to_speech("私の名前は、おおむら です。私の声を覚えてください", "speech_sample1_oomura.mp3", voice="alloy")
+    # mo.text_to_speech("私の名前は、いちのへ です。私の声を覚えてください", "speech_sample2_ichinohe.mp3", voice="onyx")
+    # mo.text_to_speech("私の名前は、かすや です。私の声を覚えてください", "speech_sample3_kasuya.mp3", voice="shimmer")
+    # mo.text_to_speech("私の名前は、つがわ です。私の声を覚えてください", "speech_sample4_tsugawa.mp3", voice="nova")
+    # mo.text_to_speech("では、チームミーティングを始めたいと思います。今日のファシリはだれだっけ？", "speech_sample_talk1.mp3", voice="alloy")
+    # mo.text_to_speech("アサナに書いてますよ。ちょっと待って。今開きますから。", "speech_sample_talk2.mp3", voice="onyx")
+    # mo.text_to_speech("今日はかすやさんですね。かすやさん、回してもらっていいですか。", "speech_sample_talk3.mp3", voice="onyx")
+    # mo.text_to_speech("了解です。では１つ目の議題から行きましょう。まずは、えーっと、ちょっと待ってくださいね。あー、１つ目はビジョンの確認ですね。", "speech_sample_talk4.mp3", voice="shimmer")
+
+    d_dictionary = [
+        {
+            "発音": "あさな",
+            "単語": "Asana",
+            "意味": "タスク管理ツール"
+        }
+    ]
+    mo.add_message("今から名前を読み上げた音声データを渡します。声質からその人の名前を覚えてください")
+    mo.add_message_with_audio("大村の声です", "speech_sample1_oomura.mp3")
+    mo.add_message_with_audio("一戸の声です", "speech_sample2_ichinohe.mp3")
+    mo.add_message_with_audio("粕谷の声です", "speech_sample3_kasuya.mp3")
+    mo.add_message_with_audio("津川の声です", "speech_sample4_tsugawa.mp3")
+
+    mo.add_message(f"それでは、次に会議を録音した音声データを渡します。文章の文字起こしに加えて、誰がしゃべっているかも特定してください。\n会議で使われている専門的な単語の辞書を参考に文字起こししてください。\n\n#専門的な単語辞書: ```\n{d_dictionary}\n```")
+    mo.add_message_with_audio("", "speech_sample_talk1.mp3")
+    res = mo.run_gemini()
+    print(res)
+
+    mo.add_message_with_audio("", "speech_sample_talk2.mp3")
+    res = mo.run_gemini()
+    print(res)
+
+    mo.add_message_with_audio("", "speech_sample_talk3.mp3")
+    res = mo.run_gemini()
+    print(res)
+
+    mo.add_message_with_audio("", "speech_sample_talk4.mp3")
+    res = mo.run_gemini()
+    print(res)
+
+    print(res)
+
+    
 
 if __name__ == "__main__" :
     load_dotenv()
+    sample_text_to_speech()
     mo = myopenai("gpt-4.1", model_gemini="gemini-2.5-pro-exp-03-25")
 
     # 準備(音声ファイル準備)
