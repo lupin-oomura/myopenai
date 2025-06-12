@@ -24,7 +24,8 @@ import pyaudio
 import mimetypes
 
 
-model_gemini_default = "gemini-2.5-flash-preview-04-17"
+# model_gemini_default = "gemini-2.5-flash-preview-04-17"
+model_gemini_default = "gemini-2.5-pro-preview-06-05"
 
 class myopenai :
 
@@ -837,22 +838,52 @@ class myopenai :
         return cost
 
 
-    def save_messages(self, file_path:str) :
-        messages = {"openai": self.messages, "claude": self.messages_claude, "gemini": self.messages_gemini}
-        # with open(file_path, "w", encoding="utf-8") as f:
-        #     json.dump(messages, f, ensure_ascii=False, indent=4)
-        with open(f"{file_path}.pkl", "wb") as f:
-            pickle.dump(messages, f)        
+    def save_messages(self, file_path:str=None) :
+        if not file_path :
+            file_path = f"messages_data"
+        messages = self.messages_gemini
+        for msg in messages:
+            if 'parts' in msg:
+                for part in msg['parts']:
+                    if 'inline_data' in part and 'data' in part['inline_data']:
+                        data = part['inline_data']['data']
+                        if isinstance(data, bytes):
+                            # bytes型ならbase64でエンコードしてstrに
+                            part['inline_data']['data'] = base64.b64encode(data).decode('utf-8')
+        json.dump(messages            , open(f"{file_path}_gemini.json", "w", encoding="utf-8-sig"), ensure_ascii=False, indent=4)
+        json.dump(self.messages       , open(f"{file_path}_openai.json", "w", encoding="utf-8-sig"), ensure_ascii=False, indent=4)
+        json.dump(self.messages_claude, open(f"{file_path}_claude.json", "w", encoding="utf-8-sig"), ensure_ascii=False, indent=4)
 
-    def load_messages(self, file_path:str) :
-        with open(f"{file_path}.pkl", "rb") as f:
-            messages = pickle.load(f)
-        # with open(file_path, "r", encoding="utf-8") as f:
-        #     messages = json.load(f)
+        # messages = {"openai": self.messages, "claude": self.messages_claude, "gemini": self.messages_gemini}
+        # # with open(file_path, "w", encoding="utf-8") as f:
+        # #     json.dump(messages, f, ensure_ascii=False, indent=4)
+        # with open(f"{file_path}.pkl", "wb") as f:
+        #     pickle.dump(messages, f)        
 
-        self.messages = messages["openai"]
-        self.messages_claude = messages["claude"]
-        self.messages_gemini = messages["gemini"]
+    def load_messages(self, file_path:str=None) :
+        if not file_path :
+            file_path = f"messages_data"
+        messages = json.load(open(f"{file_path}_gemini.json", "r", encoding="utf-8-sig"))
+        for msg in messages:
+            if 'parts' in msg:
+                for part in msg['parts']:
+                    if 'inline_data' in part and 'data' in part['inline_data']:
+                        data = part['inline_data']['data']
+                        if isinstance(data, str):
+                            # base64文字列ならbytesにデコード
+                            part['inline_data']['data'] = base64.b64decode(data)
+        self.messages_gemini = messages
+        self.messages        = json.load(open(f"{file_path}_openai.json", "r", encoding="utf-8-sig"))
+        self.messages_claude = json.load(open(f"{file_path}_claude.json", "r", encoding="utf-8-sig"))
+
+        # with open(f"{file_path}.pkl", "rb") as f:
+        #     messages = pickle.load(f)
+        # # with open(file_path, "r", encoding="utf-8") as f:
+        # #     messages = json.load(f)
+
+        # self.messages = messages["openai"]
+        # self.messages_claude = messages["claude"]
+        # self.messages_gemini = messages["gemini"]
 
     #---------------------------------------------------------
     # プロンプトを整形する（改行ごとに、前後の空白を除去）
@@ -908,17 +939,17 @@ def sample_text_to_speech() :
     
 
 if __name__ == "__main__" :
+    # sample_text_to_speech()
     load_dotenv()
-    sample_text_to_speech()
     mo = myopenai("gpt-4.1", model_gemini="gemini-2.5-pro-exp-03-25")
 
-    # 準備(音声ファイル準備)
+    # # 準備(音声ファイル準備)
     # mo.text_to_speech("出身地についても教えて", "speech_sample1.mp3")
     # mo.text_to_speech("奥さんの名前は？", "speech_sample2.mp3")
 
-    #-----------------------------------------
-    # 使い方あれこれ
-    #-----------------------------------------
+    # # -----------------------------------------
+    # # 使い方あれこれ
+    # # -----------------------------------------
     # # OpenAIの場合
     # #単純照会
     # mo.add_message("あなたはアメリカメジャーリーグのスペシャリストです。", role="system")
@@ -942,6 +973,9 @@ if __name__ == "__main__" :
     # res = mo.run(model="gpt-4o-mini-audio-preview") #音声が入っている場合は、このモデルがマスト
     # print(res)
     # print(mo.get_cost_all())
+
+    # mo.save_messages()
+    # mo.load_messages()
 
     #-----------------------------------
     #--- Gemini ------------------------
