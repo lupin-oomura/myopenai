@@ -49,6 +49,8 @@ class myopenai :
         else :
             self.default_model = "gpt-4.1-mini"
 
+        # api_key=os.getenv("GEMINI_API_KEY")
+        # print(f"gemini api key: {api_key}")
         gemini.configure(api_key=os.getenv("GEMINI_API_KEY"))
 
         # pricedata.jsonを読み込む
@@ -299,12 +301,15 @@ class myopenai :
         response = self.client_gemini.generate_content(
             contents=self.messages_gemini,
         )
-        total_tokens = response.usage_metadata.total_token_count
-        token_input_text = response.usage_metadata.prompt_token_count
-        token_input_text_cached = response.usage_metadata.cached_content_token_count
-        token_output_text = response.usage_metadata.candidates_token_count
-        token_input_audio = total_tokens - token_input_text - token_input_text_cached - token_output_text
 
+        total_tokens            = response.usage_metadata.total_token_count
+        token_input_text        = response.usage_metadata.prompt_token_count
+        token_input_text_cached = response.usage_metadata.cached_content_token_count
+        token_output_text       = response.usage_metadata.candidates_token_count
+        token_input_txt_incpic  = total_tokens - token_input_text_cached - token_output_text
+        if token_input_text < token_input_txt_incpic :
+            token_input_text = token_input_txt_incpic
+        token_input_audio       = 0
         self.add_message(response.text, "assistant")
         self.f_running = False
 
@@ -474,8 +479,10 @@ class myopenai :
         token_input_text        = response.usage_metadata.prompt_token_count
         token_input_text_cached = response.usage_metadata.cached_content_token_count
         token_output_text       = response.usage_metadata.candidates_token_count
-        token_input_audio       = total_tokens - token_input_text - token_input_text_cached - token_output_text
-
+        token_input_txt_incpic  = total_tokens - token_input_text_cached - token_output_text
+        if token_input_text < token_input_txt_incpic :
+            token_input_text = token_input_txt_incpic
+        token_input_audio       = 0
         self.add_message(response.text, "assistant")
         self.f_running = False
 
@@ -489,7 +496,6 @@ class myopenai :
         #             break
         #     if token_audio > 0 :
         #         break
-
         
         self.l_cost.append({
             "model"               : response.model_version,
