@@ -11,4 +11,3 @@ commanddata.txt
 dist/
 build/
 *.egg-info/
-build/
